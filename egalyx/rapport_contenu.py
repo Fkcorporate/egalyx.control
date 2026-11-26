@@ -106,14 +106,27 @@ def remplir(texte, valeurs):
     return re.sub(r'\{([a-z_]+)\}', lambda m: str(valeurs[m.group(1)]) if m.group(1) in valeurs else m.group(0), texte or '')
 
 
+def redaction_validee(audit):
+    """Résumé exécutif et conclusion rédigés pour cette mission et validés par l'auditeur (egalyx/ia_audit.py)."""
+    r = getattr(audit, 'redaction_rapport', None) if audit is not None else None
+    if not isinstance(r, dict) or r.get('etat') != 'valide':
+        return None
+    return {'resume': (r.get('resume') or '').strip(), 'conclusion': (r.get('conclusion') or '').strip()}
+
+
 class Contenu:
-    def __init__(self, rapport, r, valeurs):
+    def __init__(self, rapport, r, valeurs, mission=None):
         d = RAPPORTS[rapport]
         self.rapport = rapport
         self.titre = r['titre'] or d['titre']
         self.titre_regle = bool(r['titre'])
         self.introduction = remplir(r['introduction'], valeurs).strip()
         self.conclusion = remplir(r['conclusion'], valeurs).strip()
+        # texte propre à la mission (validé par l'auditeur) : en tête du résumé, et conclusion avant le texte type
+        self.resume_mission = (mission or {}).get('resume', '')
+        self.conclusion_mission = (mission or {}).get('conclusion', '')
+        if self.conclusion_mission:
+            self.conclusion = (self.conclusion_mission + ('\n\n' + self.conclusion if self.conclusion else '')).strip()
         self.signataires = r['signataires']
         self.signataires_regles = r['signataires_regles']
         self._masquees = set(r['masquees'])
@@ -146,7 +159,7 @@ class Contenu:
         return [(k, f'{n}. {d[k]}') for k, n in sorted(self._numeros.items(), key=lambda x: x[1])]
 
 
-def contenu_rapport(rapport, cid=None, valeurs=None):
+def contenu_rapport(rapport, cid=None, valeurs=None, audit=None):
     cid = cid if cid is not None else client_id_courant()
     v = {'organisation': '', 'date': ''}
     if cid:
@@ -164,7 +177,8 @@ def contenu_rapport(rapport, cid=None, valeurs=None):
         from datetime import date
         v['date'] = date.today().strftime('%d/%m/%Y')
     v.update({k: ('' if x is None else x) for k, x in (valeurs or {}).items()})
-    return Contenu(rapport, reglages(cid, rapport) if cid else reglages(None, rapport), v)
+    return Contenu(rapport, reglages(cid, rapport) if cid else reglages(None, rapport), v,
+                   mission=redaction_validee(audit) if rapport == 'audit' else None)
 
 
 def appliquer(cid, rapport, form):

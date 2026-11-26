@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ r.titre }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .cp-outils { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: .75rem; }
+  .cp-outils .btn-group .btn { font-size: .8rem; }
+  .cp-barre-orga { display: none; align-items: center; gap: .6rem; background: var(--bs-primary-bg-subtle); border: 1px solid var(--bs-primary-border-subtle);
+                   border-radius: 8px; padding: .5rem .75rem; margin-bottom: .75rem; font-size: .85rem; }
+  .cp-barre-orga.visible { display: flex; }
+  .cp-panneau dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--bs-secondary-color); font-weight: 600; margin-top: .85rem; }
+  .cp-panneau dd { margin: .2rem 0 0; font-size: .88rem; }
+  .cp-panneau ul { padding-left: 1.1rem; margin: 0; }
+  .cp-panneau .cp-ligne { display: flex; justify-content: space-between; gap: .5rem; border-bottom: 1px solid var(--bs-border-color); padding: .3rem 0; font-size: .84rem; }
+  .cp-panneau .cp-ligne:last-child { border-bottom: 0; }
+  .cp-modeles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .6rem; }
+  .cp-modele { text-align: left; border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .75rem .85rem; background: var(--bs-body-bg); width: 100%; }
+  .cp-modele:hover { border-color: var(--bs-primary); }
+  .cp-modele strong { display: block; font-size: .9rem; }
+  .cp-modele span { font-size: .78rem; color: var(--bs-secondary-color); }
+  .cp-flux td { font-size: .85rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1400px;">
+  {% call pg.entete(r.titre, 'fa-sitemap', organisation ~ ' · ' ~ d.stats.premier_niveau ~ ' processus de 1er niveau, ' ~ d.stats.processus ~ ' au total') %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('carto_processus.imprimer', vue=vue, **cid_param) }}" target="_blank" rel="noopener"><i class="fas fa-print me-1"></i>Imprimer / PDF</a>
+    {% if gerer %}
+    <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#cpModalProcessus" data-cp-nouveau><i class="fas fa-plus me-1"></i>Ajouter un processus</button>
+    {% endif %}
+  {% endcall %}
+
+  {% if d.stats.processus %}
+  <div class="pg-kpis">
+    {{ pg.kpi('Processus de 1er niveau', d.stats.premier_niveau) }}
+    {{ pg.kpi('Sans propriétaire', d.stats.sans_proprietaire, 'var(--bs-warning-text-emphasis)' if d.stats.sans_proprietaire else none) }}
+    {{ pg.kpi('Sans risque rattaché', d.stats.sans_risque, 'var(--bs-warning-text-emphasis)' if d.stats.sans_risque else none) }}
+    {{ pg.kpi('Jamais audités', d.stats.jamais_audites, 'var(--bs-danger-text-emphasis)' if d.stats.jamais_audites else none) }}
+  </div>
+
+  <div class="cp-outils pg-no-print">
+    <div class="btn-group" role="group" aria-label="Lecture de la carte">
+      {% for code, lib, ic in (('simple', 'Carte', 'fa-sitemap'), ('risques', 'Vue risques', 'fa-triangle-exclamation'), ('audit', "Couverture d'audit", 'fa-magnifying-glass')) %}
+      <a class="btn btn-sm {{ 'btn-primary' if vue == code else 'btn-outline-secondary' }}" href="{{ url_for('carto_processus.page', vue=code, **cid_param) }}" {% if vue == code %}aria-current="page"{% endif %}><i class="fas {{ ic }} me-1"></i>{{ lib }}</a>
+      {% endfor %}
+    </div>
+    <div class="form-check form-switch ms-2 mb-0">
+      <input class="form-check-input" type="checkbox" id="cpInteractions" {% if request.args.get('interactions') == '1' %}checked{% endif %} {% if not d.flux %}disabled{% endif %}>
+      <label class="form-check-label small" for="cpInteractions">Interactions ({{ d.flux|length }})</label>
+    </div>
+    {% if gerer %}
+    <button class="btn btn-sm btn-outline-secondary ms-auto" type="button" id="cpOrganiser"><i class="fas fa-up-down-left-right me-1"></i>Organiser la carte</button>
+    {% endif %}
+  </div>
+  {% if gerer %}
+  <div class="cp-barre-orga" id="cpBarreOrga" role="status">
+    <i class="fas fa-hand-pointer text-primary"></i>
+    <span>Faites glisser les processus pour changer leur ordre ou leur bande (pilotage, réalisation, support…).</span>
+    <button class="btn btn-sm btn-primary ms-auto" type="button" id="cpOrgaEnregistrer">Enregistrer l'organisation</button>
+    <button class="btn btn-sm btn-outline-secondary" type="button" id="cpOrgaAnnuler">Annuler</button>
+  </div>
+  {% endif %}
+
+  <div class="pg-carte">
+    {% include "egalyx/_carto_processus_carte.html" %}
+  </div>
+  {% else %}
+  <div class="pg-carte">
+    {{ pg.vide("Aucun processus pour l'instant. Partez d'un modèle type ou ajoutez vos processus un par un.", 'fa-sitemap') }}
+    {% if gerer %}
+    <form method="post" action="{{ url_for('carto_processus.appliquer_modele', **cid_param) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="cp-modeles">
+        {% for code, (nom, lignes) in modeles.items() %}
+        <button class="cp-modele" name="modele" value="{{ code }}"><strong>{{ nom }}</strong>
+          <span>{{ lignes|length }} processus : {% for l in lignes[:3] %}{{ l[2] }}{{ ', ' if not loop.last }}{% endfor %}…</span></button>
+        {% endfor %}
+      </div>
+    </form>
+    {% else %}
+    <p class="pg-second text-center mb-0">Les processus sont créés par les personnes qui organisent la cartographie dans votre organisation.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if gerer and d.stats.processus %}
+  <div class="row g-3">
+    <div class="col-lg-7">
+      {% call pg.carte('Interactions entre processus', aide='Flux de données, de produits ou de décisions') %}
+        {% if d.flux %}
+        <table class="pg-table cp-flux mb-3">
+          <thead><tr><th>De</th><th></th><th>Vers</th><th>Ce qui circule</th><th></th></tr></thead>
+          <tbody>
+          {% for f in d.flux %}
+            <tr><td>{{ f.de_nom }}</td><td class="text-secondary"><i class="fas fa-arrow-right"></i></td><td>{{ f.vers_nom }}</td><td class="pg-second">{{ f.libelle or '—' }}</td>
+              <td class="text-end"><form method="post" action="{{ url_for('carto_processus.supprimer_interaction', fid=f.id, **cid_param) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-link text-danger p-0" title="Supprimer l'interaction" aria-label="Supprimer l'interaction {{ f.de_nom }} vers {{ f.vers_nom }}"><i class="fas fa-trash-can"></i></button></form></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        <form method="post" action="{{ url_for('carto_processus.ajouter_interaction', **cid_param) }}" class="row g-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-md-4"><label class="form-label small mb-1" for="cpDe">De</label>
+            <select class="form-select form-select-sm" name="de" id="cpDe" required><option value="">—</option>
+              {% for p in d.liste %}<option value="{{ p.id }}">{{ '— ' if p.parent_id }}{{ p.code }} {{ p.nom }}</option>{% endfor %}</select></div>
+          <div class="col-md-4"><label class="form-label small mb-1" for="cpVers">Vers</label>
+            <select class="form-select form-select-sm" name="vers" id="cpVers" required><option value="">—</option>
+              {% for p in d.liste %}<option value="{{ p.id }}">{{ '— ' if p.parent_id }}{{ p.code }} {{ p.nom }}</option>{% endfor %}</select></div>
+          <div class="col-md-4"><label class="form-label small mb-1" for="cpLib">Ce qui circule <span class="text-secondary">(facultatif)</span></label>
+            <input class="form-control form-control-sm" name="libelle" id="cpLib" maxlength="80" placeholder="ex. bons de commande"></div>
+          <div class="col-12"><button class="btn btn-sm btn-outline-primary"><i class="fas fa-plus me-1"></i>Ajouter l'interaction</button></div>
+        </form>
+      {% endcall %}
+    </div>
+    <div class="col-lg-5">
+      {% call pg.carte('Réglages de la carte') %}
+        <form method="post" action="{{ url_for('carto_processus.reglages', **cid_param) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-2"><label class="form-label small mb-1" for="cpTitre">Titre</label>
+            <input class="form-control form-control-sm" id="cpTitre" name="titre" value="{{ r.titre }}" maxlength="120"></div>
+          <div class="row g-2 mb-2">
+            <div class="col-6"><label class="form-label small mb-1" for="cpEntree">Entrée (à gauche)</label>
+              <input class="form-control form-control-sm" id="cpEntree" name="entree" value="{{ r.entree }}" maxlength="140"></div>
+            <div class="col-6"><label class="form-label small mb-1" for="cpSortie">Sortie (à droite)</label>
+              <input class="form-control form-control-sm" id="cpSortie" name="sortie" value="{{ r.sortie }}" maxlength="140"></div>
+          </div>
+          <div class="row g-2 mb-2">
+            {% for b, _t, _l in bandes %}
+            <div class="col-6"><label class="form-label small mb-1" for="cpB{{ b }}">Bande {{ loop.index }}</label>
+              <input class="form-control form-control-sm" id="cpB{{ b }}" name="bande_{{ b }}" value="{{ r.bandes[b] }}" maxlength="60"></div>
+            {% endfor %}
+          </div>
+          <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="sous_processus" value="1" id="cpSous" {% if r.sous_processus %}checked{% endif %}>
+            <label class="form-check-label small" for="cpSous">Afficher les sous-processus dans leur processus</label></div>
+          <button class="btn btn-sm btn-primary">Enregistrer</button>
+        </form>
+      {% endcall %}
+      <details class="pg-carte">
+        <summary class="small fw-semibold">Compléter à partir d'un modèle type</summary>
+        <p class="pg-second mt-2">Ajoute les processus du modèle qui n'existent pas encore (même nom) ; rien n'est supprimé.</p>
+        <form method="post" action="{{ url_for('carto_processus.appliquer_modele', **cid_param) }}" class="d-flex gap-2 flex-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% for code, (nom, _l) in modeles.items() %}<button class="btn btn-sm btn-outline-secondary" name="modele" value="{{ code }}">{{ nom }}</button>{% endfor %}
+        </form>
+      </details>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# Panneau de détail d'un processus #}
+<div class="offcanvas offcanvas-end cp-panneau" tabindex="-1" id="cpPanneau" aria-labelledby="cpPanneauTitre" style="width: min(440px, 100vw);">
+  <div class="offcanvas-header border-bottom">
+    <div><div class="small text-secondary" id="cpPanneauCode"></div><h2 class="offcanvas-title h5 mb-0" id="cpPanneauTitre"></h2></div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
+  </div>
+  <div class="offcanvas-body pt-1" id="cpPanneauCorps"></div>
+</div>
+
+{% if gerer %}
+{# Ajout / modification d'un processus #}
+<div class="modal fade" id="cpModalProcessus" tabindex="-1" aria-labelledby="cpModalTitre" aria-hidden="true">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <form method="post" action="{{ url_for('carto_processus.enregistrer_processus', **cid_param) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="id" id="cpFId">
+      <div class="modal-header"><h2 class="modal-title h5" id="cpModalTitre">Ajouter un processus</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-8"><label class="form-label small mb-1" for="cpFNom">Nom *</label><input class="form-control" name="nom" id="cpFNom" required maxlength="200"></div>
+          <div class="col-md-4"><label class="form-label small mb-1" for="cpFCode">Code</label><input class="form-control" name="code" id="cpFCode" maxlength="50" placeholder="ex. REA-02"></div>
+          <div class="col-md-6"><label class="form-label small mb-1" for="cpFBande">Bande</label>
+            <select class="form-select" name="bande" id="cpFBande">{% for b, _t, _l in bandes %}<option value="{{ b }}" {% if b == 'realisation' %}selected{% endif %}>{{ r.bandes[b] }}</option>{% endfor %}</select>
+            <div class="form-text">Un sous-processus prend la bande de son processus parent.</div></div>
+          <div class="col-md-6"><label class="form-label small mb-1" for="cpFParent">Sous-processus de</label>
+            <select class="form-select" name="parent_id" id="cpFParent"><option value="">— aucun (processus de 1er niveau) —</option>
+              {% for p in d.liste %}<option value="{{ p.id }}">{{ '— ' if p.parent_id }}{{ p.code }} {{ p.nom }}</option>{% endfor %}</select></div>
+          <div class="col-md-6"><label class="form-label small mb-1" for="cpFProprio">Propriétaire (pilote)</label>
+            <select class="form-select" name="proprietaire_id" id="cpFProprio"><option value="">— non désigné —</option>
+              {% for u in utilisateurs %}<option value="{{ u.id }}">{{ ((u.prenom or '') ~ ' ' ~ (u.nom or ''))|trim or u.username }}</option>{% endfor %}</select></div>
+          <div class="col-12"><label class="form-label small mb-1" for="cpFDesc">Finalité / description</label><textarea class="form-control" name="description" id="cpFDesc" rows="3" maxlength="2000"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-outline-danger me-auto d-none" id="cpFRetirer" formaction="" formnovalidate
+                onclick="return confirm('Retirer ce processus (et ses sous-processus) de la carte ? Ils sont archivés ; leurs risques et audits restent.');">Retirer de la carte</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary" id="cpFValider">Ajouter</button>
+      </div>
+    </form>
+  </div></div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var D = {{ d|tojson }}, GERER = {{ 'true' if gerer else 'false' }}, BANDES = {{ r.bandes|tojson }};
+  var URL_FICHE = {{ (url_for('detail_processus_metier', id=0) if fiche_processus else '')|tojson }};
+  var URL_LOGI = {{ (url_for('editer_logigramme', id=0) if fiche_processus else '')|tojson }};
+  var URL_RETIRER = {{ url_for('carto_processus.retirer_processus', pid=0, **cid_param)|tojson }};
+  var URL_ORGA = {{ url_for('carto_processus.organiser', **cid_param)|tojson }};
+  var parId = {};
+  Object.keys(D.bandes).forEach(function (b) { D.bandes[b].forEach(function (p) { p.bande = b; parId[p.id] = p; }); });
+  var carte = document.getElementById('cpCarte');
+  if (!carte) return;
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+  function lien(url, id) { return url.replace(/\/0(\/|\?|$)/, '/' + id + '$1'); }
+  var NIV = ['secondary', 'success', 'warning', 'orange', 'danger'];
+  function badge(n, lib) { var c = NIV[n] || 'secondary'; return '<span class="badge ' + (c === 'orange' ? '' : 'text-bg-' + c) + '"' + (c === 'orange' ? ' style="background:#fd7e14;color:#fff"' : '') + '>' + esc(lib) + '</span>'; }
+
+  var panneau = document.getElementById('cpPanneau'), oc = window.bootstrap ? bootstrap.Offcanvas.getOrCreateInstance(panneau) : null;
+  function ouvrir(id) {
+    var p = parId[id]; if (!p) return;
+    document.getElementById('cpPanneauCode').textContent = p.code + ' · ' + (BANDES[p.bande] || '');
+    document.getElementById('cpPanneauTitre').textContent = p.nom;
+    var h = '<dl class="mb-0">';
+    h += '<dt>Propriétaire</dt><dd>' + (p.proprietaire ? esc(p.proprietaire) : '<span class="text-warning-emphasis">Non désigné</span>') + '</dd>';
+    if (p.directions.length) h += '<dt>Directions</dt><dd>' + p.directions.map(esc).join(', ') + '</dd>';
+    if (p.description) h += '<dt>Finalité</dt><dd style="white-space:pre-line">' + esc(p.description) + '</dd>';
+    if (p.enfants.length) h += '<dt>Sous-processus (' + p.enfants.length + ')</dt><dd><ul>' + p.enfants.map(function (e) { return '<li>' + esc(e.code ? e.code + ' — ' + e.nom : e.nom) + '</li>'; }).join('') + '</ul></dd>';
+    h += '<dt>Risques rattachés (' + p.nb_risques + ')</dt><dd>';
+    h += p.risques.length ? p.risques.map(function (x) { return '<div class="cp-ligne"><span><strong>' + esc(x.ref) + '</strong> ' + esc(x.intitule) + '</span>' + badge(x.niveau, x.niveau_lib) + '</div>'; }).join('')
+         + (p.nb_risques > p.risques.length ? '<div class="pg-second mt-1">… et ' + (p.nb_risques - p.risques.length) + ' autre(s)</div>' : '')
+         : '<span class="pg-second">Aucun risque rattaché à ce processus dans la cartographie des risques.</span>';
+    h += '</dd><dt>Audit</dt><dd><div class="mb-1">' + esc(p.couverture_lib) + (p.recos_ouvertes ? ' · <strong>' + p.recos_ouvertes + '</strong> recommandation(s) ouverte(s)' : '') + '</div>';
+    h += p.audits.map(function (a) { return '<div class="cp-ligne"><span><strong>' + esc(a.ref) + '</strong> ' + esc(a.titre) + '</span><span class="pg-second">' + esc(a.date) + '</span></div>'; }).join('');
+    h += '</dd>';
+    var entrants = D.flux.filter(function (f) { return f.vers_carte === p.id; }), sortants = D.flux.filter(function (f) { return f.de_carte === p.id; });
+    if (entrants.length || sortants.length) {
+      h += '<dt>Interactions</dt><dd>';
+      entrants.forEach(function (f) { h += '<div class="cp-ligne"><span><i class="fas fa-arrow-right-to-bracket me-1 text-secondary"></i>de ' + esc(f.de_nom) + '</span><span class="pg-second">' + esc(f.libelle) + '</span></div>'; });
+      sortants.forEach(function (f) { h += '<div class="cp-ligne"><span><i class="fas fa-arrow-right-from-bracket me-1 text-secondary"></i>vers ' + esc(f.vers_nom) + '</span><span class="pg-second">' + esc(f.libelle) + '</span></div>'; });
+      h += '</dd>';
+    }
+    h += '</dl><div class="d-flex gap-2 flex-wrap mt-4">';
+    if (GERER) h += '<button class="btn btn-sm btn-primary" type="button" data-cp-modifier="' + p.id + '"><i class="fas fa-pen me-1"></i>Modifier</button>';
+    if (URL_FICHE) h += '<a class="btn btn-sm btn-outline-secondary" href="' + lien(URL_FICHE, p.id) + '">Fiche du processus</a>';
+    if (URL_LOGI && p.logigramme_id) h += '<a class="btn btn-sm btn-outline-secondary" href="' + lien(URL_LOGI, p.logigramme_id) + '"><i class="fas fa-diagram-project me-1"></i>Logigramme</a>';
+    h += '</div>';
+    document.getElementById('cpPanneauCorps').innerHTML = h;
+    if (oc) oc.show();
+  }
+  carte.addEventListener('click', function (e) {
+    var t = e.target.closest('.cp-tuile'); if (!t || carte.classList.contains('organiser')) return;
+    ouvrir(+t.dataset.id);
+  });
+
+  var inter = document.getElementById('cpInteractions');
+  if (inter) inter.addEventListener('change', function () { carte.classList.toggle('avec-liens', inter.checked); window.cpDessinerLiens && window.cpDessinerLiens(); });
+
+  if (!GERER) return;
+  // ---------- ajout / modification
+  var modal = document.getElementById('cpModalProcessus'), form = modal.querySelector('form');
+  function remplir(p) {
+    document.getElementById('cpModalTitre').textContent = p ? 'Modifier « ' + p.nom + ' »' : 'Ajouter un processus';
+    document.getElementById('cpFValider').textContent = p ? 'Enregistrer' : 'Ajouter';
+    document.getElementById('cpFId').value = p ? p.id : '';
+    document.getElementById('cpFNom').value = p ? p.nom : '';
+    document.getElementById('cpFCode').value = p ? (p.code === p.reference ? '' : p.code) : '';
+    document.getElementById('cpFBande').value = p ? p.bande : 'realisation';
+    document.getElementById('cpFParent').value = p && p.parent_id ? p.parent_id : '';
+    document.getElementById('cpFProprio').value = p && p.proprietaire_id ? p.proprietaire_id : '';
+    document.getElementById('cpFDesc').value = p ? p.description : '';
+    Array.prototype.forEach.call(document.getElementById('cpFParent').options, function (o) { o.disabled = !!p && +o.value === p.id; });
+    var ret = document.getElementById('cpFRetirer');
+    ret.classList.toggle('d-none', !p); if (p) ret.setAttribute('formaction', lien(URL_RETIRER, p.id));
+  }
+  document.querySelectorAll('[data-cp-nouveau]').forEach(function (b) { b.addEventListener('click', function () { remplir(null); }); });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cp-modifier]'); if (!b) return;
+    if (oc) oc.hide();
+    remplir(parId[+b.dataset.cpModifier]);
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+  });
+
+  // ---------- organiser (glisser-déposer)
+  var btn = document.getElementById('cpOrganiser'), barre = document.getElementById('cpBarreOrga'), glisse = null, etatInitial = null;
+  function tuiles() { return carte.querySelectorAll('.cp-tuile'); }
+  function photo() { var o = {}; carte.querySelectorAll('.cp-tuiles').forEach(function (z) { o[z.dataset.bande] = Array.prototype.map.call(z.querySelectorAll('.cp-tuile'), function (t) { return +t.dataset.id; }); }); return o; }
+  function basculer(actif) {
+    carte.classList.toggle('organiser', actif); barre.classList.toggle('visible', actif); btn.disabled = actif;
+    tuiles().forEach(function (t) { t.draggable = actif; });
+    if (actif) { carte.classList.remove('avec-liens'); etatInitial = photo(); }
+  }
+  btn.addEventListener('click', function () { basculer(true); });
+  document.getElementById('cpOrgaAnnuler').addEventListener('click', function () { location.reload(); });
+  carte.addEventListener('dragstart', function (e) { var t = e.target.closest('.cp-tuile'); if (!t) return; glisse = t; t.classList.add('deplace'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.dataset.id); });
+  carte.addEventListener('dragend', function () { if (glisse) glisse.classList.remove('deplace'); glisse = null; carte.querySelectorAll('.cible').forEach(function (z) { z.classList.remove('cible'); }); });
+  carte.querySelectorAll('.cp-tuiles').forEach(function (zone) {
+    zone.addEventListener('dragover', function (e) {
+      if (!glisse) return; e.preventDefault(); zone.classList.add('cible');
+      var vide = zone.querySelector('.cp-vide-bande'); if (vide) vide.remove();
+      var apres = Array.prototype.filter.call(zone.querySelectorAll('.cp-tuile:not(.deplace)'), function (t) {
+        var r = t.getBoundingClientRect(); return e.clientY < r.top + r.height / 2 && e.clientX < r.left + r.width / 2 || e.clientY < r.top;
+      })[0];
+      if (apres) zone.insertBefore(glisse, apres); else zone.appendChild(glisse);
+    });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('cible'); });
+    zone.addEventListener('drop', function (e) { e.preventDefault(); zone.classList.remove('cible'); });
+  });
+  document.getElementById('cpOrgaEnregistrer').addEventListener('click', function () {
+    var b = this; b.disabled = true;
+    fetch(URL_ORGA, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+                      body: JSON.stringify({ bandes: photo() }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j.success) location.reload(); else { b.disabled = false; alert("L'organisation n'a pas pu être enregistrée."); } })
+      .catch(function () { b.disabled = false; alert("L'organisation n'a pas pu être enregistrée (connexion)."); });
+  });
+})();
+</script>
+{% endblock %}

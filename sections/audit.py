@@ -985,6 +985,8 @@ def nouvelle_constatation(audit_id):
             conclusion=conclusion,
             commentaires=commentaires,
             recommandations_immediates=request.form.get('recommandations_immediates', '').strip(),
+            critere=request.form.get('critere', '').strip() or None,          # 5 C : critère (règle attendue)
+            consequence=request.form.get('consequence', '').strip() or None,  # 5 C : conséquence (risque, impact)
             statut='a_analyser',
             audit_id=audit_id,
             # 🔥 CORRECTION : Les IDs sont maintenant bien récupérés
@@ -9820,7 +9822,7 @@ def rapport_audit_word_pro(audit_id):
     from egalyx.rapport_contenu import contenu_rapport
     from egalyx.rapport_word import preparer_document, texte_libre, entete_tableau
     rp = presentation_rapport(audit.client_id)
-    ct = contenu_rapport('audit', cid=audit.client_id, valeurs={'reference': audit.reference, 'mission': audit.titre})
+    ct = contenu_rapport('audit', cid=audit.client_id, valeurs={'reference': audit.reference, 'mission': audit.titre}, audit=audit)
     preparer_document(doc, rp)
     from egalyx.cartouche_qualite import cartouche_word
     cartouche_word(doc, audit.client_id, audit)     # cartouche qualité en haut de chaque page, s'il est activé
@@ -9863,7 +9865,9 @@ def rapport_audit_word_pro(audit_id):
     if ct.montre('resume'):
         # Résumé exécutif
         doc.add_heading("RÉSUMÉ EXÉCUTIF", level=2)
-    
+        if ct.resume_mission:                       # résumé rédigé pour la mission et validé par l'auditeur
+            texte_libre(doc, ct.resume_mission)
+
         resume = doc.add_paragraph()
         resume.add_run(f"L'audit {audit.reference} a permis d'identifier ").font.size = Pt(11)
         resume.add_run(f"{len(constatations)} constatation(s)").bold = True

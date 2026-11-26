@@ -32,6 +32,8 @@ CATALOGUE = [
      'Gestion des risques', ('can_view_tableau_bord_strategique', 'can_view_rapport_comite'), ()),
     ('processus', 'Processus et logigrammes', 'Processus, organigrammes, contrôles rattachés',
      'Contrôle interne', ('can_manage_logigram',), ('gestion_processus',)),
+    ('carto_processus', 'Cartographie des processus', 'Carte pilotage / réalisation / support, interactions, vues risques et audit',
+     'Contrôle interne', ('can_view_carto_processus', 'can_manage_carto_processus'), ()),
     ('campagnes', 'Campagnes de contrôle', 'Campagnes et tests de contrôles',
      'Contrôle interne', ('can_manage_campaigns', 'can_view_campaigns', 'can_conduct_campaigns'), ('campagnes_controle',)),
     ('controle_n2', 'Contrôle interne de 2e niveau', 'Référentiel, planification et exécution des contrôles N2',
@@ -66,6 +68,9 @@ CATALOGUE = [
 MODULES = {m[0]: m for m in CATALOGUE}
 GROUPES = ['Gestion des risques', 'Contrôle interne', 'Audit interne', 'Conformité', 'Outils']
 MODULE_DE_PERMISSION = {p: m[0] for m in CATALOGUE for p in m[4]}
+# Modules livrés sur demande : fermés tant que le super admin ne les a pas cochés pour le client
+# (même pour un client « sans restriction » ou suivant sa formule).
+SUR_ACTIVATION = {'carto_processus'}
 
 PROFILS = {
     'audit': ('Cabinet ou service d’audit', 'Missions d’audit, programme, recommandations et plans d’action',
@@ -73,7 +78,7 @@ PROFILS = {
     'risques': ('Gestion des risques', 'Cartographie, KRI, incidents, plans d’action, pilotage',
                 ('cartographie', 'kri', 'incidents', 'plans_action', 'pilotage', 'support')),
     'controle': ('Contrôle interne', 'Risques, processus, campagnes et contrôles de 2e niveau',
-                 ('cartographie', 'processus', 'campagnes', 'controle_n2', 'plans_action', 'pilotage', 'support')),
+                 ('cartographie', 'processus', 'carto_processus', 'campagnes', 'controle_n2', 'plans_action', 'pilotage', 'support')),
     'conformite': ('Conformité et LCB-FT', 'Veille, tiers, alerte, risques de conformité',
                    ('cartographie', 'veille', 'tiers', 'alertes', 'plans_action', 'pilotage', 'support')),
     'complet': ('Suite complète', 'Tous les modules', tuple(MODULES)),
@@ -95,8 +100,14 @@ def modules_du_client(client):
     if os.environ.get('EGALYX_MODULES_PAR_FORMULE', '1') == '1':
         formule = getattr(client, 'formule', None)
         if formule is not None and getattr(formule, 'modules', None):
-            return modules_depuis_formule(formule)
+            return modules_depuis_formule(formule) - SUR_ACTIVATION
     return None
+
+
+def module_sur_activation_actif(client, code):
+    """Un module « sur activation » n'est ouvert que si le super admin l'a coché pour ce client."""
+    choix = getattr(client, 'modules_actifs', None) if client is not None else None
+    return bool(choix and choix.get(code))
 
 
 def permission_autorisee_par_module(user, permission):
@@ -104,6 +115,8 @@ def permission_autorisee_par_module(user, permission):
     module = MODULE_DE_PERMISSION.get(permission)
     if module is None:
         return True                      # permission transversale (tableau de bord, utilisateurs, paramètres…)
+    if module in SUR_ACTIVATION:
+        return module_sur_activation_actif(getattr(user, 'client', None), module)
     try:
         actifs = modules_du_client(getattr(user, 'client', None))
     except Exception:
@@ -114,9 +127,11 @@ def permission_autorisee_par_module(user, permission):
 def modules_depuis_formule(formule):
     """Proposition de départ à partir des modules de la formule d'abonnement."""
     if formule is None or not getattr(formule, 'modules', None):
-        return set(MODULES)
+        return set(MODULES) - SUR_ACTIVATION
     actifs = set()
     for code, _n, _d, _g, _p, cles in CATALOGUE:
+        if code in SUR_ACTIVATION:
+            continue
         if not cles or any(formule.modules.get(k) for k in cles):
             actifs.add(code)
     return actifs
@@ -153,7 +168,7 @@ def page(client_id):
         return redirect(url_for('.page', client_id=client_id))
     actifs = modules_du_client(client)
     nb_utilisateurs = User.query.filter_by(client_id=client.id, is_active=True).count()
-    return render_template('egalyx/modules_client.html', client=client, actifs=actifs,
+    return render_template('egalyx/modules_client.html', client=client, actifs=actifs, sur_activation=SUR_ACTIVATION,
                            proposition=actifs if actifs is not None else modules_depuis_formule(getattr(client, 'formule', None)),
                            catalogue=CATALOGUE, groupes=GROUPES, profils=PROFILS, nb_utilisateurs=nb_utilisateurs)
 

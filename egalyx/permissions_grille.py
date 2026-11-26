@@ -8,7 +8,8 @@ egalyx/permissions_grille.py — une seule liste de permissions, cohérente avec
 - À l'enregistrement (quel que soit l'écran : admin client, super admin, import…), les permissions d'un module
   non souscrit sont remises à « non » ; « gérer » entraîne « voir » quand les deux existent.
 """
-from egalyx.modules_client import CATALOGUE, MODULES, MODULE_DE_PERMISSION, modules_du_client
+from egalyx.modules_client import (CATALOGUE, MODULES, MODULE_DE_PERMISSION, SUR_ACTIVATION, module_sur_activation_actif,
+                                   modules_du_client)
 
 LIBELLES = {
     # transversal
@@ -31,6 +32,8 @@ LIBELLES = {
     'can_manage_bcp': 'Gérer les plans de continuité', 'can_view_bcp': 'Voir les plans de continuité',
     'can_test_bcp': 'Tester les plans de continuité', 'can_view_tableau_bord_strategique': 'Tableau de bord stratégique',
     'can_view_rapport_comite': "Rapport au comité d'audit", 'can_manage_logigram': 'Gérer les logigrammes et processus',
+    'can_view_carto_processus': 'Voir la cartographie des processus',
+    'can_manage_carto_processus': 'Organiser la cartographie des processus (processus, interactions, réglages)',
     'can_manage_campaigns': 'Gérer les campagnes de contrôle', 'can_view_campaigns': 'Voir les campagnes de contrôle',
     'can_conduct_campaigns': 'Réaliser les campagnes de contrôle',
     'can_view_controle_interne_n2': 'Voir le contrôle interne N2', 'can_manage_controle_interne_n2': 'Gérer le contrôle interne N2',
@@ -59,13 +62,13 @@ TRANSVERSAL = [
       'can_manage_files', 'can_manage_templates', 'can_manage_import_export')),
 ]
 ICONES = {'cartographie': 'fa-map', 'kri': 'fa-gauge-high', 'incidents': 'fa-triangle-exclamation', 'pca': 'fa-life-ring',
-          'pilotage': 'fa-chart-line', 'processus': 'fa-project-diagram', 'campagnes': 'fa-clipboard-list',
+          'pilotage': 'fa-chart-line', 'processus': 'fa-project-diagram', 'carto_processus': 'fa-sitemap', 'campagnes': 'fa-clipboard-list',
           'controle_n2': 'fa-user-check', 'qualite': 'fa-medal', 'audit': 'fa-magnifying-glass', 'programme_audit': 'fa-calendar-days',
           'plans_action': 'fa-list-check', 'recommandations': 'fa-clipboard-check', 'questionnaires': 'fa-square-poll-vertical',
           'veille': 'fa-scale-balanced', 'tiers': 'fa-handshake', 'alertes': 'fa-bullhorn', 'ia': 'fa-robot', 'api': 'fa-plug',
           'support': 'fa-ticket'}
 # « gérer » donne « voir »
-IMPLIQUE = {'can_manage_recommandations': 'can_view_recommandations', 'can_manage_controle_interne_n2': 'can_view_controle_interne_n2',
+IMPLIQUE = {'can_manage_carto_processus': 'can_view_carto_processus', 'can_manage_recommandations': 'can_view_recommandations', 'can_manage_controle_interne_n2': 'can_view_controle_interne_n2',
             'can_manage_campaigns': 'can_view_campaigns', 'can_conduct_campaigns': 'can_view_campaigns',
             'can_manage_incidents': 'can_view_incidents', 'can_manage_bcp': 'can_view_bcp', 'can_test_bcp': 'can_view_bcp',
             'can_manage_quality': 'can_view_quality', 'can_manage_quality_plans': 'can_view_quality',
@@ -118,7 +121,10 @@ def grille(user, client):
         vus.update(perms_m)
         if not perms_m:
             continue
-        actif = actifs is None or mcode in actifs
+        if mcode in SUR_ACTIVATION:
+            actif = module_sur_activation_actif(client, mcode)
+        else:
+            actif = actifs is None or mcode in actifs
         sections.append({'code': mcode, 'titre': nom, 'icone': ICONES.get(mcode, 'fa-cube'), 'groupe': groupe, 'actif': actif,
                          'perms': [(p, libelle(p), coche(p) and actif) for p in perms_m]})
     code, titre, icone, perms = TRANSVERSAL[1]

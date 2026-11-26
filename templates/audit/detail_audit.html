@@ -912,6 +912,17 @@
                         
                                 <hr class="w-100">
                         
+                                {% if ia_audit_peut is defined and ia_audit_peut(audit) %}
+                                {% set _rr = audit.redaction_rapport if audit.redaction_rapport is mapping else {} %}
+                                <a href="{{ url_for('ia_audit.preparation', audit_id=audit.id) }}" class="btn-elegant btn-outline w-100">
+                                    <i class="fas fa-route me-2"></i> Préparer la mission
+                                </a>
+                                <a href="{{ url_for('ia_audit.redaction', audit_id=audit.id) }}" class="btn-elegant btn-outline w-100">
+                                    <i class="fas fa-pen-nib me-2"></i> Rédaction du rapport
+                                    {% if _rr.get('etat') == 'valide' %}<span class="badge bg-success ms-1">validée</span>
+                                    {% elif _rr.get('etat') == 'brouillon' %}<span class="badge bg-warning text-dark ms-1">brouillon</span>{% endif %}
+                                </a>
+                                {% endif %}
                                 <a href="{{ url_for('rapport_audit_complet', audit_id=audit.id) }}" class="btn-elegant btn-info w-100">
                                     <i class="fas fa-eye me-2"></i> {{ t("Voir rapport complet") }}
                                 </a>
@@ -2656,6 +2667,66 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body modal-body-modern">
+                    {% if ia_fonction is defined and ia_fonction('redaction_constats') %}
+                    <div class="ia-notes mb-3" id="iaNotesConstat">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="fas fa-wand-magic-sparkles text-primary"></i>
+                            <strong class="small">Rédiger à partir de mes notes</strong>
+                            <span class="small text-secondary">— l’IA propose le constat, vous relisez avant de créer</span>
+                        </div>
+                        <label class="visually-hidden" for="iaNotesTexte">Notes de l’auditeur</label>
+                        <textarea class="form-control form-control-sm" id="iaNotesTexte" rows="4" maxlength="6000"
+                                  placeholder="Vos notes brutes : ce que vous avez vu, l’échantillon, les chiffres, la règle concernée si vous la connaissez… ex. « 12 bons de commande sur 40 signés par un agent sans délégation, montants > 5 M FCFA, procédure achats §4.2 »"></textarea>
+                        <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="iaNotesBouton" data-url="{{ url_for('ia_audit.constat_proposer', audit_id=audit.id) }}">
+                                <span class="ia-libelle"><i class="fas fa-wand-magic-sparkles me-1"></i>Proposer le constat</span>
+                                <span class="ia-attente d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Rédaction…</span>
+                            </button>
+                            <span class="small" id="iaNotesEtat" role="status"></span>
+                        </div>
+                        <ul class="small mb-0 mt-2 d-none" id="iaNotesPoints"></ul>
+                    </div>
+                    <style>
+                        .ia-notes { border: 1px solid var(--bs-primary-border-subtle); background: var(--bs-primary-bg-subtle); border-radius: 10px; padding: .75rem .9rem; }
+                        .ia-propose { box-shadow: 0 0 0 2px var(--bs-primary-border-subtle) !important; }
+                    </style>
+                    <script>
+                    (function () {
+                        var b = document.getElementById('iaNotesBouton'), etat = document.getElementById('iaNotesEtat'), pts = document.getElementById('iaNotesPoints');
+                        if (!b) return;
+                        function champ(id, v) { var el = document.getElementById(id); if (!el || v == null) return; el.value = v; el.classList.add('ia-propose'); }
+                        b.addEventListener('click', function () {
+                            var notes = document.getElementById('iaNotesTexte').value.trim();
+                            if (notes.length < 15) { etat.className = 'small text-warning-emphasis'; etat.textContent = 'Saisissez vos notes (au moins une phrase).'; return; }
+                            var dejaRempli = ['cstFait', 'cstCritere', 'cstCause', 'cstConsequence', 'cstReco'].some(function (id) { var el = document.getElementById(id); return el && el.value.trim(); });
+                            if (dejaRempli && !confirm('Remplacer le texte déjà saisi dans le constat ?')) return;
+                            b.disabled = true; b.querySelector('.ia-libelle').classList.add('d-none'); b.querySelector('.ia-attente').classList.remove('d-none');
+                            etat.textContent = ''; pts.classList.add('d-none');
+                            var risque = document.getElementById('selectRisqueConstatation');
+                            fetch(b.dataset.url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+                                    body: JSON.stringify({ notes: notes, risque_id: risque ? risque.value : '' }) })
+                              .then(function (r) { return r.json(); })
+                              .then(function (j) {
+                                  if (!j.success) { etat.className = 'small text-danger'; etat.textContent = j.error || 'Proposition impossible.'; return; }
+                                  var c = j.constat;
+                                  champ('cstFait', (c.titre ? c.titre + ' — ' : '') + c.fait);
+                                  champ('cstCritere', c.critere); champ('cstCause', c.cause); champ('cstConsequence', c.consequence); champ('cstReco', c.recommandation);
+                                  champ('cstType', c.type); champ('cstGravite', c.gravite);
+                                  if (c.points_a_verifier && c.points_a_verifier.length) {
+                                      pts.innerHTML = ''; var t = document.createElement('li'); t.className = 'list-unstyled fw-semibold'; t.textContent = 'À vérifier avant de créer :'; pts.appendChild(t);
+                                      c.points_a_verifier.forEach(function (p) { var li = document.createElement('li'); li.textContent = p; pts.appendChild(li); });
+                                      pts.classList.remove('d-none');
+                                  }
+                                  etat.className = 'small ' + (j.origine === 'ia' ? 'text-primary-emphasis' : 'text-warning-emphasis');
+                                  etat.textContent = j.origine_libelle;
+                              })
+                              .catch(function () { etat.className = 'small text-danger'; etat.textContent = 'Proposition impossible (connexion).'; })
+                              .finally(function () { b.disabled = false; b.querySelector('.ia-libelle').classList.remove('d-none'); b.querySelector('.ia-attente').classList.add('d-none'); });
+                        });
+                    })();
+                    </script>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">{{ t("Processus concerné") }}</label>
                         <div class="mb-3">
@@ -2705,15 +2776,19 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">{{ t("Description *") }}</label>
-                        <textarea class="form-control" name="description" rows="4" required 
+                        <label class="form-label" for="cstFait">{{ t("Description *") }} <span class="small text-secondary">(le fait constaté)</span></label>
+                        <textarea class="form-control" name="description" id="cstFait" rows="4" required 
                                   placeholder="{{ t("Décrivez la constatation...") }}"></textarea>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="cstCritere">Critère <span class="small text-secondary">(règle attendue : procédure, norme, réglementation)</span></label>
+                        <textarea class="form-control" name="critere" id="cstCritere" rows="2"></textarea>
+                    </div>
                     
-                    <div class="row">
+                    <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">{{ t("Type de constatation *") }}</label>
-                            <select class="form-select" name="type_constatation" required>
+                            <select class="form-select" name="type_constatation" id="cstType" required>
                                 <option value="">{{ t("Sélectionner...") }}</option>
                                 <option value="conformite">{{ t("Conformité") }}</option>
                                 <option value="non_conformite">{{ t("Non-conformité") }}</option>
@@ -2723,7 +2798,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">{{ t("Gravité") }}</label>
-                            <select class="form-select" name="gravite">
+                            <select class="form-select" name="gravite" id="cstGravite">
                                 <option value="mineure">{{ t("Mineure") }}</option>
                                 <option value="moyenne" selected>{{ t("Moyenne") }}</option>
                                 <option value="majeure">{{ t("Majeure") }}</option>
@@ -2733,9 +2808,17 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">{{ t("Cause racine") }}</label>
-                        <textarea class="form-control" name="cause_racine" rows="2" 
+                        <label class="form-label" for="cstCause">{{ t("Cause racine") }}</label>
+                        <textarea class="form-control" name="cause_racine" id="cstCause" rows="2" 
                                   placeholder="{{ t("Cause racine identifiée...") }}"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="cstConsequence">Conséquence <span class="small text-secondary">(risque ou impact pour l’organisation)</span></label>
+                        <textarea class="form-control" name="consequence" id="cstConsequence" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="cstReco">Recommandation</label>
+                        <textarea class="form-control" name="recommandations_immediates" id="cstReco" rows="2"></textarea>
                     </div>
                     
                     <div class="mb-3">
@@ -2746,7 +2829,7 @@
 
                     <div class="mb-3">
                         <label class="form-label">{{ t("Commentaires additionnels") }}</label>
-                        <textarea class="form-control" name="commentaires" rows="2" 
+                        <textarea class="form-control" name="commentaires" id="cstCommentaires" rows="2" 
                                   placeholder="{{ t("Commentaires internes pour l'équipe d'audit...") }}"></textarea>
                     </div>
                     

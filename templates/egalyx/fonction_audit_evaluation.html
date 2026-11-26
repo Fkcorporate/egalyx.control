@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Évaluation {{ 'interne' if e.type_evaluation == 'interne' else 'externe' }} {{ e.annee }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fe-p { border-top: 1px solid var(--bs-border-color); padding: .8rem 0; }
+  .fe-p:first-of-type { border-top: 0; }
+  .fe-p .fe-obs { font-size: .8rem; color: var(--bs-secondary-color); margin: .2rem 0 .4rem; padding-left: 1rem; }
+  .fe-niv { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .fe-niv label { border: 1px solid var(--bs-border-color); border-radius: 6px; padding: .2rem .55rem; font-size: .8rem; cursor: pointer; }
+  .fe-niv input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .fe-niv label:has(input:checked) { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); font-weight: 600; }
+  .fe-niv label:has(input:focus-visible) { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+</style>{% endblock %}
+{% block content %}
+{% set fige = e.statut == 'valide' %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete('Évaluation ' ~ ('interne' if e.type_evaluation == 'interne' else 'externe') ~ ' ' ~ e.annee, 'fa-clipboard-check',
+                    "Conformité aux 15 principes des Normes internationales d'audit interne (IIA, 2024).",
+                    retour=url_for('fonction_audit.page_qualite', annee=e.annee), libelle_retour='Qualité de la fonction') %}{% endcall %}
+  {% if fige %}<div class="alert alert-success">Évaluation validée{% if e.valide_le %} le {{ e.valide_le.strftime('%d/%m/%Y') }}{% endif %} : elle ne se modifie plus.</div>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset {{ 'disabled' if fige }}>
+    {% call pg.carte('Évaluation') %}
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small mb-0" for="date_evaluation">Date</label>
+          <input class="form-control form-control-sm" type="date" id="date_evaluation" name="date_evaluation" value="{{ e.date_evaluation.isoformat() if e.date_evaluation else '' }}"></div>
+        <div class="col-md-8"><label class="form-label small mb-0" for="evaluateur">{{ 'Évaluateur externe (cabinet, personne)' if e.type_evaluation == 'externe' else 'Conduite par' }}</label>
+          <input class="form-control form-control-sm" id="evaluateur" name="evaluateur" maxlength="200" value="{{ e.evaluateur or '' }}"></div>
+      </div>
+    {% endcall %}
+    {% for code, nom, principes in domaines %}
+    {% call pg.carte('Domaine ' ~ code ~ ' — ' ~ nom) %}
+      {% for n, titre in principes %}{% set r = rep.get(n|string, {}) %}
+      <div class="fe-p">
+        <div class="fw-semibold">{{ n }}. {{ titre }}</div>
+        {% if preuves.get(n) %}<ul class="fe-obs">{% for p in preuves[n] %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+        <div class="fe-niv mb-2" role="radiogroup" aria-label="Conformité au principe {{ n }}">
+          {% for k, v in niveaux.items() %}<label><input type="radio" name="p{{ n }}_niveau" value="{{ k }}" {{ 'checked' if r.niveau == k }}><span>{{ v }}</span></label>{% endfor %}
+        </div>
+        <div class="row g-2">
+          <div class="col-md-7"><textarea class="form-control form-control-sm" name="p{{ n }}_commentaire" rows="2" placeholder="Constat, pièces examinées" aria-label="Commentaire sur le principe {{ n }}">{{ r.commentaire or '' }}</textarea></div>
+          <div class="col-md-5"><textarea class="form-control form-control-sm" name="p{{ n }}_action" rows="2" placeholder="Action d'amélioration (si besoin)" aria-label="Action d'amélioration pour le principe {{ n }}">{{ r.action or '' }}</textarea></div>
+        </div>
+      </div>
+      {% endfor %}
+    {% endcall %}
+    {% endfor %}
+    {% call pg.carte('Conclusion') %}
+      <div class="fe-niv mb-2" role="radiogroup" aria-label="Conclusion générale">
+        {% for k, v in conclusions.items() %}<label><input type="radio" name="conclusion" value="{{ k }}" {{ 'checked' if e.conclusion == k }}><span>{{ v }}</span></label>{% endfor %}
+      </div>
+      <textarea class="form-control" name="synthese" rows="4" placeholder="Synthèse à présenter au Conseil (points forts, écarts, plan d'amélioration)" aria-label="Synthèse">{{ e.synthese or '' }}</textarea>
+    {% endcall %}
+    </fieldset>
+    {% if not fige %}
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-primary" name="action" value="enregistrer"><i class="fas fa-save me-1"></i>Enregistrer le brouillon</button>
+      <button class="btn btn-sm btn-success" name="action" value="valider"><i class="fas fa-check me-1"></i>Valider l'évaluation</button>
+    </div>
+    <p class="pg-second mt-2">Pour valider : chaque principe évalué, une date et une conclusion{% if e.type_evaluation == 'externe' %}, et l'évaluateur externe{% endif %}. Une évaluation validée ne se modifie plus.</p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

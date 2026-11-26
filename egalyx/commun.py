@@ -196,3 +196,11 @@ def exempter_controle_ancien(app, endpoints):
             enveloppe.__name__ = nom
             enveloppe._egalyx = True
             liste[i] = enveloppe
+
+
+def nom_personne(u, defaut=''):
+    """Nom affiché d'un utilisateur : « Prénom Nom » s'ils sont renseignés, sinon l'identifiant de connexion."""
+    if u is None:
+        return defaut
+    complet = ' '.join(x for x in ((getattr(u, 'prenom', None) or '').strip(), (getattr(u, 'nom', None) or '').strip()) if x)
+    return complet or getattr(u, 'username', None) or defaut

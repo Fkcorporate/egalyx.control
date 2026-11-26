@@ -724,6 +724,70 @@ ARTICLES = [
       liens=[('Processus métier', 'liste_processus_metier')],
       perms=['can_manage_logigram']),
 
+    A('assistant_questions_donnees', 'audit', 'Interroger l’assistant sur vos données',
+      'Bulle de l’assistant, en bas à droite : posez votre question en langage courant ; la réponse donne les chiffres '
+      'et des liens vers les fiches, selon vos droits.',
+      etapes=['« Quels processus à risque élevé n’ont jamais été audités ? » (univers d’audit ou carte des processus).',
+              '« Quelles recommandations critiques sont en retard ? » ; « Recommandations de la direction des crédits ».',
+              '« Indicateurs de l’audit 2026 » : programme réalisé, délai des rapports, recommandations mises en œuvre, satisfaction, couverture.',
+              'Questions plus libres (« qu’est-ce qui bloque côté suivi ? ») : l’IA choisit les données à lire, si elle est activée.'],
+      notes=['Ces questions courantes reçoivent une réponse sans IA : aucune donnée ne sort du serveur.',
+             'Avec l’IA, l’assistant ne lit que ce que vos droits permettent, dans votre organisation, en lecture seule ; '
+             'les noms sont masqués avant l’envoi.'],
+      mots=['assistant', 'question', 'questions', 'demander', 'chat', 'jamais', 'audite', 'couverture', 'indicateurs', 'retard', 'critiques', 'direction'],
+      perms=['can_manage_audit'],
+      questions=['comment interroger l assistant', 'que peut faire l assistant']),
+
+    A('ia_preparation_mission', 'audit', 'Préparer une mission avec l’IA (programme de travail)',
+      'Fiche de l’audit → « Préparer la mission » → « Proposer le programme de travail » : tests, échantillons, '
+      'documents à demander ; vous cochez ce que vous gardez et les feuilles de travail sont créées.',
+      etapes=['Associez les risques à l’audit (ou rattachez-les au processus audité) pour un programme précis.',
+              'Fiche de l’audit → **Préparer la mission** : la page montre les risques, contrôles et audits précédents retenus.',
+              '**Proposer le programme de travail** : objectifs, points d’attention, tests (procédure, critères, échantillon, pièces, charge) et documents à demander.',
+              'Décochez ce que vous ne gardez pas, corrigez les titres, puis **Créer les feuilles de travail** : une feuille par risque, '
+              'une pour les tests transverses et le suivi des recommandations, une liste des documents à demander.'],
+      notes=['Échantillons selon la fréquence du contrôle : quotidien 25, hebdomadaire 10, mensuel 3, trimestriel 2, annuel 1.',
+             'Sans IA (coupée par l’éditeur ou indisponible) : programme type, un test par contrôle et un test de suivi par recommandation ouverte.',
+             'Les feuilles existantes ne sont jamais remplacées : les nouvelles s’ajoutent.'],
+      mots=['preparer', 'preparation', 'mission', 'programme', 'travail', 'tests', 'echantillon', 'echantillonnage', 'documents', 'demande', 'planifier', 'ia'],
+      perms=['can_manage_audit'],
+      questions=['preparer une mission avec l ia', 'programme de travail', 'quels tests faire']),
+
+    A('ia_constats_rapport', 'audit', 'Rédiger un constat ou le rapport avec l’IA',
+      'Constat : « Nouvelle constatation » → « Rédiger à partir de mes notes ». Rapport : fiche de l’audit → '
+      '« Rédaction du rapport » → « Proposer un premier jet ». Vous relisez toujours avant d’enregistrer.',
+      etapes=['Dans **Nouvelle constatation**, tapez vos notes brutes (ce que vous avez vu, l’échantillon, les chiffres).',
+              '**Proposer le constat** : le fait, le critère, la cause, la conséquence, la recommandation, la gravité et le type sont remplis ; les points à vérifier s’affichent.',
+              'Corrigez puis **Créer la constatation**.',
+              'Pour le rapport : fiche de l’audit → **Rédaction du rapport** → **Proposer un premier jet** (résumé exécutif et conclusion à partir des constats et recommandations).',
+              'Corrigez, **Enregistrer le brouillon**, puis **Valider pour le rapport** : seul le texte validé figure dans les rapports PDF et Word.'],
+      notes=['Les noms, e-mails, téléphones, numéros de compte et le nom de l’organisation sont masqués avant l’envoi à l’IA, puis remis en clair.',
+             'L’IA n’invente ni chiffre, ni nom, ni date : ce qui manque est signalé « À compléter ».',
+             'Si l’IA est indisponible, une proposition automatique (sans IA) est faite et annoncée comme telle.',
+             'Fonctions activées par l’éditeur, le module « Analyse IA » de votre organisation et la permission « Utiliser l’analyse IA ».'],
+      mots=['ia', 'intelligence', 'artificielle', 'rediger', 'redaction', 'constat', 'notes', 'rapport', 'resume', 'executif', 'conclusion', 'premier', 'jet', 'brouillon'],
+      perms=['can_use_ia_analysis'],
+      questions=['rediger un constat avec l ia', 'ecrire le rapport avec l ia', 'premier jet du rapport']),
+
+    A('carto_processus', 'controle', 'Construire la cartographie des processus',
+      'Menu **Carte des processus** : vos processus rangés en pilotage, réalisation et support, entre les besoins '
+      'et la satisfaction des parties intéressées. Module activé sur demande par l’éditeur.',
+      etapes=['Partez d’un **modèle type** (générique, banque, industrie / mines) ou **ajoutez vos processus** un par un.',
+              'Pour chaque processus : code, propriétaire (pilote), finalité ; rangez les sous-processus sous leur parent.',
+              '**Organiser la carte** : faites glisser les processus pour changer leur ordre ou leur bande.',
+              'Déclarez les **interactions** (ce qui circule d’un processus à l’autre) et affichez-les sur la carte.',
+              'Lisez la carte en **vue risques** (risque le plus élevé rattaché) ou en **couverture d’audit** (dernier audit).',
+              '**Imprimer / PDF** : version A4 paysage pour vos manuels et comités.'],
+      notes=['Ce sont les mêmes processus que dans « Processus métier » : rien n’est saisi deux fois.',
+             'Un risque apparaît sur un processus quand il lui est rattaché dans la cartographie des risques ; un audit, '
+             'quand son processus audité est ce processus (ou son logigramme).',
+             'Voir la carte : permission « voir la cartographie des processus » ; la modifier : « organiser… ». '
+             'Les administrateurs de l’organisation ont les deux.'],
+      mots=['cartographie', 'processus', 'carte', 'macro', 'pilotage', 'realisation', 'support', 'iso', '9001', 'interactions', 'flux', 'chaine', 'valeur'],
+      liens=[('Carte des processus', 'carto_processus.page')],
+      perms=['can_view_carto_processus', 'can_manage_carto_processus'],
+      questions=['avez-vous la cartographie des processus', 'comment faire la carte des processus', 'macro processus']),
+
     A('campagne', 'controle', 'Mener une campagne de contrôle (et la faire valider)',
       'Une campagne teste un contrôle sur un échantillon de dossiers. Elle suit le même circuit que le contrôle '
       'interne N2 : saisie → soumission → une seule décision du validateur → non-conformités créées à la validation.',

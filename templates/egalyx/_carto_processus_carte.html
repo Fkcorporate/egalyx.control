@@ -1,0 +1,184 @@
+{# Carte des processus : partagée par la page (carto_processus.html) et la version imprimable. #}
+<style>
+  .cp-carte { --cp-trait: var(--bs-border-color, #dee2e6); --cp-fond: var(--bs-body-bg, #fff); --cp-doux: var(--bs-tertiary-bg, #f8f9fa);
+              --cp-p: var(--bs-primary, #0d6efd); --cp-p-doux: var(--bs-primary-bg-subtle, #cfe2ff); --cp-p-bord: var(--bs-primary-border-subtle, #9ec5fe);
+              --cp-texte2: var(--bs-secondary-color, #6c757d);
+              display: grid; grid-template-columns: 46px minmax(0, 1fr) 46px; gap: 10px; align-items: stretch; position: relative; }
+  .cp-borne { position: relative; background: var(--cp-p-doux); color: var(--cp-p); border-radius: 8px; display: flex; align-items: center; justify-content: center;
+              font-weight: 650; font-size: .78rem; letter-spacing: .02em; text-align: center; padding: 10px 0; }
+  .cp-borne span { writing-mode: vertical-rl; transform: rotate(180deg); line-height: 1.25; max-height: 100%; }
+  .cp-borne.entree { clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%); padding-right: 10px; }
+  .cp-borne.sortie { clip-path: polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%, 30% 50%); padding-left: 10px; padding-right: 8px; }
+  .cp-centre { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .cp-bande { border: 1px solid var(--cp-trait); border-radius: 10px; background: var(--cp-doux); padding: 8px 10px 10px; position: relative; }
+  .cp-bande[data-bande=realisation] { background: var(--cp-fond); border-color: var(--cp-p-bord); }
+  .cp-bande-titre { font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--cp-texte2); margin: 0 0 7px 2px;
+                    display: flex; align-items: center; gap: .45rem; }
+  .cp-bande[data-bande=realisation] .cp-bande-titre { color: var(--cp-p); }
+  .cp-bande-titre .cp-nb { font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .cp-tuiles { display: flex; flex-wrap: wrap; gap: 8px; min-height: 46px; }
+  .cp-bande[data-bande=realisation] .cp-tuiles { gap: 4px; }
+  .cp-tuile { flex: 1 1 165px; max-width: 280px; min-width: 140px; text-align: left; background: var(--cp-fond); border: 1px solid var(--cp-trait);
+              border-left: 4px solid var(--cp-trait); border-radius: 8px; padding: 7px 9px 8px; font-size: .8rem; color: inherit; cursor: pointer;
+              position: relative; transition: box-shadow .15s, border-color .15s; display: flex; flex-direction: column; gap: 3px; }
+  .cp-tuile:hover, .cp-tuile:focus-visible { box-shadow: 0 2px 10px rgba(16, 24, 40, .12); outline: none; border-color: var(--cp-p-bord); }
+  .cp-tuile:focus-visible { box-shadow: 0 0 0 3px var(--cp-p-doux); }
+  .cp-bande[data-bande=realisation] .cp-tuile { border: 0; border-radius: 0; background: var(--cp-p-doux); padding: 9px 22px 9px 24px; flex: 1 1 150px; max-width: none;
+              clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%); }
+  .cp-bande[data-bande=realisation] .cp-tuile:first-child { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); padding-left: 12px; }
+  .cp-code { font-size: .68rem; font-weight: 650; color: var(--cp-texte2); letter-spacing: .03em; }
+  .cp-nom { font-weight: 650; line-height: 1.25; font-size: .84rem; }
+  .cp-proprio { color: var(--cp-texte2); font-size: .72rem; }
+  .cp-sous { list-style: none; margin: 2px 0 0; padding: 0; font-size: .72rem; color: var(--bs-body-color, #212529); }
+  .cp-sous li { padding-left: 9px; position: relative; line-height: 1.3; }
+  .cp-sous li::before { content: ''; position: absolute; left: 0; top: .5em; width: 4px; height: 4px; border-radius: 50%; background: var(--cp-texte2); }
+  .cp-sous li.cp-plus { color: var(--cp-texte2); }
+  .cp-sous li.cp-plus::before { display: none; }
+  .cp-ind { display: flex; gap: 9px; flex-wrap: wrap; margin-top: auto; padding-top: 3px; font-size: .7rem; color: var(--cp-texte2); }
+  .cp-ind span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .cp-pastille { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: #adb5bd; }
+  .niv-1 .cp-pastille, .cp-pastille.niv-1 { background: #198754; } .niv-2 .cp-pastille, .cp-pastille.niv-2 { background: #e0a800; }
+  .niv-3 .cp-pastille, .cp-pastille.niv-3 { background: #fd7e14; } .niv-4 .cp-pastille, .cp-pastille.niv-4 { background: #dc3545; }
+  .cp-vide-bande { color: var(--cp-texte2); font-size: .78rem; padding: 10px 4px; }
+  /* lecture « risques » et « couverture d'audit » : la couleur porte l'information */
+  .cp-carte[data-vue=risques] .cp-tuile.niv-1, .cp-carte[data-vue=audit] .cp-tuile.cov-recent { border-left-color: #198754; background: #e9f6ef; }
+  .cp-carte[data-vue=risques] .cp-tuile.niv-2, .cp-carte[data-vue=audit] .cp-tuile.cov-ancien { border-left-color: #e0a800; background: #fff6d9; }
+  .cp-carte[data-vue=risques] .cp-tuile.niv-3, .cp-carte[data-vue=audit] .cp-tuile.cov-tres_ancien { border-left-color: #fd7e14; background: #ffecdc; }
+  .cp-carte[data-vue=risques] .cp-tuile.niv-4, .cp-carte[data-vue=audit] .cp-tuile.cov-jamais { border-left-color: #dc3545; background: #fde8ea; }
+  .cp-carte[data-vue=risques] .cp-tuile.niv-0 { border-left-color: #adb5bd; background: var(--cp-fond); border-left-style: dashed; }
+  .cp-carte[data-vue=risques] .cp-bande[data-bande=realisation] .cp-tuile.niv-0 { background: var(--cp-doux); }
+  /* interactions */
+  .cp-liens { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 2; }
+  .cp-liens path { fill: none; stroke: var(--cp-p); stroke-width: 1.6; opacity: .8; }
+  .cp-liens .cp-lien-texte { font-size: 10.5px; fill: var(--bs-body-color, #212529); font-family: inherit; }
+  .cp-liens .cp-lien-fond { fill: var(--cp-fond); stroke: var(--cp-p-bord); stroke-width: 1; }
+  .cp-carte:not(.avec-liens) .cp-liens { display: none; }
+  /* organisation par glisser-déposer */
+  .cp-carte.organiser .cp-tuile { cursor: grab; outline: 1px dashed var(--cp-p-bord); outline-offset: -3px; }
+  .cp-carte.organiser .cp-tuiles { min-height: 60px; border-radius: 6px; }
+  .cp-carte.organiser .cp-tuiles.cible { background: var(--cp-p-doux); }
+  .cp-tuile.deplace { opacity: .35; }
+  .cp-legende { display: flex; gap: 14px; flex-wrap: wrap; font-size: .75rem; color: var(--cp-texte2); margin-top: 8px; align-items: center; }
+  .cp-legende span { display: inline-flex; gap: 5px; align-items: center; }
+  .cp-legende i.cp-carre { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border-left: 4px solid; }
+  @media (max-width: 720px) {
+    .cp-carte { grid-template-columns: 1fr; }
+    .cp-borne { padding: 6px 10px; clip-path: none !important; }
+    .cp-borne span { writing-mode: horizontal-tb; transform: none; }
+    .cp-bande[data-bande=realisation] .cp-tuile { clip-path: none !important; border-radius: 8px; padding: 8px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cp-tuile { transition: none; } }
+</style>
+
+<div class="cp-carte{% if request.args.get('interactions') == '1' or impression and d.flux %} avec-liens{% endif %}" id="cpCarte" data-vue="{{ vue }}">
+  <div class="cp-borne entree" title="{{ r.entree }}"><span>{{ r.entree }}</span></div>
+  <div class="cp-centre" id="cpCentre">
+    <svg class="cp-liens" id="cpLiens" aria-hidden="true">
+      <defs><marker id="cpFleche" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" style="fill: var(--bs-primary, #0d6efd); stroke: none;"></path></marker></defs>
+    </svg>
+    {% for b, _type, _lib in bandes %}
+    {% set liste = d.bandes[b] %}
+    {% if liste or b != 'reglementaire' %}
+    <section class="cp-bande" data-bande="{{ b }}" aria-label="{{ r.bandes[b] }}">
+      <h3 class="cp-bande-titre">{{ r.bandes[b] }} <span class="cp-nb">· {{ liste|length }}</span></h3>
+      <div class="cp-tuiles" data-bande="{{ b }}">
+        {% for p in liste %}
+        <button type="button" class="cp-tuile niv-{{ p.niveau }} cov-{{ p.couverture }}" data-id="{{ p.id }}"
+                aria-label="{{ p.nom }} — {{ p.nb_risques }} risque(s), {{ p.couverture_lib|lower }}">
+          <span class="cp-code">{{ p.code }}</span>
+          <span class="cp-nom">{{ p.nom }}</span>
+          {% if p.proprietaire %}<span class="cp-proprio"><i class="fas fa-user-tie me-1"></i>{{ p.proprietaire }}</span>{% endif %}
+          {% if r.sous_processus and p.enfants %}
+          <ul class="cp-sous">
+            {% for e in p.enfants[:4] %}<li>{{ e.nom }}</li>{% endfor %}
+            {% if p.enfants|length > 4 %}<li class="cp-plus">+ {{ p.enfants|length - 4 }} autre(s)</li>{% endif %}
+          </ul>
+          {% endif %}
+          <span class="cp-ind">
+            <span title="Risques rattachés · niveau le plus élevé : {{ p.niveau_lib }}"><i class="cp-pastille"></i>{{ p.nb_risques }} risque{{ 's' if p.nb_risques > 1 }}</span>
+            <span title="{{ p.couverture_lib }}"><i class="fas fa-magnifying-glass"></i>{{ p.dernier_audit or 'non audité' }}</span>
+            {% if p.recos_ouvertes %}<span title="Recommandations ouvertes"><i class="fas fa-clipboard-list"></i>{{ p.recos_ouvertes }}</span>{% endif %}
+            {% if p.logigramme %}<span title="Logigramme rattaché"><i class="fas fa-diagram-project"></i></span>{% endif %}
+          </span>
+        </button>
+        {% else %}
+        <div class="cp-vide-bande">Aucun processus dans cette bande.</div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="cp-borne sortie" title="{{ r.sortie }}"><span>{{ r.sortie }}</span></div>
+</div>
+
+<div class="cp-legende" id="cpLegende">
+  {% if vue == 'risques' %}
+    <strong class="me-1">Niveau du risque le plus élevé</strong>
+    {% for n in (4, 3, 2, 1) %}<span><i class="cp-pastille niv-{{ n }}"></i>{{ niveaux[n][0] }}</span>{% endfor %}
+    <span><i class="cp-pastille"></i>Aucun risque évalué</span>
+  {% elif vue == 'audit' %}
+    <strong class="me-1">Couverture d'audit</strong>
+    <span><i class="cp-carre" style="border-color:#198754;background:#e9f6ef"></i>moins de 12 mois</span>
+    <span><i class="cp-carre" style="border-color:#e0a800;background:#fff6d9"></i>1 à 3 ans</span>
+    <span><i class="cp-carre" style="border-color:#fd7e14;background:#ffecdc"></i>plus de 3 ans</span>
+    <span><i class="cp-carre" style="border-color:#dc3545;background:#fde8ea"></i>jamais audité</span>
+  {% else %}
+    <span><i class="cp-pastille niv-4"></i>pastille : niveau du risque le plus élevé rattaché</span>
+    <span><i class="fas fa-magnifying-glass"></i>date du dernier audit</span>
+    <span><i class="fas fa-clipboard-list"></i>recommandations ouvertes</span>
+    <span><i class="fas fa-diagram-project"></i>logigramme</span>
+  {% endif %}
+  {% if d.flux %}<span><svg width="26" height="10" aria-hidden="true"><path d="M1,5 H20" stroke="currentColor" stroke-width="1.6"/><path d="M18,1 L25,5 L18,9 z" fill="currentColor"/></svg>interaction entre processus</span>{% endif %}
+</div>
+
+<script>
+(function () {
+  var FLUX = {{ d.flux|tojson }};
+  var carte = document.getElementById('cpCarte'), centre = document.getElementById('cpCentre'), svg = document.getElementById('cpLiens');
+  var NS = 'http://www.w3.org/2000/svg';
+  function rect(el) { var a = el.getBoundingClientRect(), b = centre.getBoundingClientRect(); return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height }; }
+  function dessiner() {
+    Array.prototype.slice.call(svg.querySelectorAll('g')).forEach(function (g) { g.remove(); });
+    if (!carte.classList.contains('avec-liens')) return;
+    var b = centre.getBoundingClientRect();
+    svg.setAttribute('width', b.width); svg.setAttribute('height', b.height); svg.setAttribute('viewBox', '0 0 ' + b.width + ' ' + b.height);
+    var vus = {};
+    FLUX.forEach(function (f) {
+      var a = centre.querySelector('.cp-tuile[data-id="' + f.de_carte + '"]'), c = centre.querySelector('.cp-tuile[data-id="' + f.vers_carte + '"]');
+      if (!a || !c) return;
+      var r1 = rect(a), r2 = rect(c), x1, y1, x2, y2, d;
+      var cle = Math.min(f.de_carte, f.vers_carte) + '-' + Math.max(f.de_carte, f.vers_carte), decal = (vus[cle] = (vus[cle] || 0) + 1) - 1;
+      if (Math.abs((r1.y + r1.h / 2) - (r2.y + r2.h / 2)) < 20) {           // même rangée : arc au-dessus
+        x1 = r1.x + r1.w / 2; x2 = r2.x + r2.w / 2; y1 = r1.y + 4; y2 = r2.y + 4;
+        var h = 26 + 14 * decal + Math.min(40, Math.abs(x2 - x1) / 8);
+        d = 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + (y1 - h) + ' ' + x2 + ',' + (y2 - h) + ' ' + x2 + ',' + y2;
+        var mx = (x1 + x2) / 2, my = Math.min(y1, y2) - h * .75;
+      } else {                                                              // bandes différentes : courbe verticale
+        var bas = r2.y > r1.y;
+        x1 = r1.x + r1.w / 2 + decal * 10; x2 = r2.x + r2.w / 2 + decal * 10;
+        y1 = bas ? r1.y + r1.h : r1.y; y2 = bas ? r2.y : r2.y + r2.h;
+        var k = (y2 - y1) / 2;
+        d = 'M' + x1 + ',' + y1 + ' C' + x1 + ',' + (y1 + k) + ' ' + x2 + ',' + (y2 - k) + ' ' + x2 + ',' + y2;
+        var mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      }
+      var g = document.createElementNS(NS, 'g'), p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', d); p.setAttribute('marker-end', 'url(#cpFleche)'); g.appendChild(p);
+      var titre = document.createElementNS(NS, 'title'); titre.textContent = f.de_nom + ' → ' + f.vers_nom + (f.libelle ? ' : ' + f.libelle : ''); g.appendChild(titre);
+      svg.appendChild(g);                       // dans la page avant de mesurer le texte (getBBox vaut 0 hors du document)
+      if (f.libelle) {
+        var t = document.createElementNS(NS, 'text'); t.setAttribute('class', 'cp-lien-texte'); t.setAttribute('x', mx); t.setAttribute('y', my + 3.5);
+        t.setAttribute('text-anchor', 'middle'); t.textContent = f.libelle.length > 34 ? f.libelle.slice(0, 33) + '…' : f.libelle;
+        var fond = document.createElementNS(NS, 'rect'); fond.setAttribute('class', 'cp-lien-fond'); fond.setAttribute('rx', 4);
+        g.appendChild(fond); g.appendChild(t);
+        var bb = t.getBBox(); fond.setAttribute('x', bb.x - 5); fond.setAttribute('y', bb.y - 2); fond.setAttribute('width', bb.width + 10); fond.setAttribute('height', bb.height + 4);
+      }
+    });
+  }
+  window.cpDessinerLiens = dessiner;
+  window.addEventListener('resize', dessiner);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(dessiner);
+  dessiner();
+})();
+</script>

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Qualité de la fonction d'audit{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fq-p { padding: .55rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .fq-p:last-child { border-bottom: 0; }
+  .fq-p ul { margin: .2rem 0 0; padding-left: 1.1rem; font-size: .82rem; color: var(--bs-secondary-color); }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1150px;">
+  {{ pg.entete("Qualité de la fonction d'audit", 'fa-award', "Conformité aux Normes internationales d'audit interne (IIA, 2024) : évaluations internes et externes, indicateurs de l'année.") }}
+  <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_univers') }}"><i class="fas fa-sitemap me-1"></i>Univers d'audit</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_charte') }}"><i class="fas fa-scroll me-1"></i>Charte d'audit</a>
+    <form method="get" class="ms-auto d-flex align-items-center gap-2"><label class="small" for="annee">Année</label>
+      <select class="form-select form-select-sm" id="annee" name="annee" style="width: auto;" onchange="this.form.submit()">
+        {% for y in range(annee + 1 if annee < 2100 else annee, annee - 6, -1) %}<option value="{{ y }}" {{ 'selected' if y == annee }}>{{ y }}</option>{% endfor %}
+      </select></form>
+  </div>
+
+  {% if etat.externe_en_retard or not etat.interne_annee or not ind.charte.en_vigueur or ind.charte.revue_depassee %}
+  <div class="alert alert-warning">
+    <ul class="mb-0">
+      {% if etat.externe_en_retard %}<li>{% if etat.derniere_externe %}Évaluation externe à renouveler : la dernière date du {{ etat.derniere_externe.date_evaluation.strftime('%d/%m/%Y') }} (au moins tous les {{ externe_ans }} ans).{% else %}Aucune évaluation externe enregistrée : les Normes en demandent une au moins tous les {{ externe_ans }} ans.{% endif %}</li>{% endif %}
+      {% if not etat.interne_annee %}<li>Pas encore d'évaluation interne validée cette année.</li>{% endif %}
+      {% if not ind.charte.en_vigueur %}<li>Aucune charte d'audit approuvée.</li>{% elif ind.charte.revue_depassee %}<li>Revue annuelle de la charte d'audit dépassée.</li>{% endif %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Programme réalisé', (ind.programme.taux ~ ' %') if ind.programme.taux is not none else '—') }}
+    {{ pg.kpi('Délai moyen du rapport définitif', (ind.rapports.delai_moyen ~ ' j') if ind.rapports.delai_moyen is not none else '—') }}
+    {{ pg.kpi('Recommandations échues mises en œuvre', (ind.recommandations.taux ~ ' %') if ind.recommandations.taux is not none else '—') }}
+    {{ pg.kpi('Satisfaction des audités', (ind.satisfaction.moyenne ~ ' / 5') if ind.satisfaction.moyenne else '—') }}
+    {{ pg.kpi('Indépendance documentée', (ind.independance.taux ~ ' %') if ind.independance.taux is not none else '—') }}
+    {{ pg.kpi('Univers couvert', (ind.univers.couverture ~ ' %') if ind.univers.couverture is not none else '—') }}
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+    {% call pg.carte('Évaluations') %}
+      <p class="small mb-2">Dernière évaluation externe :
+        <strong>{% if etat.derniere_externe %}{{ etat.derniere_externe.date_evaluation.strftime('%d/%m/%Y') }} — {{ conclusions.get(etat.derniere_externe.conclusion, '') }}{% else %}aucune{% endif %}</strong>
+        {% if etat.prochaine_externe %}<br>Prochaine au plus tard : <strong>{{ etat.prochaine_externe.strftime('%d/%m/%Y') }}</strong>{% endif %}</p>
+      <form method="post" action="{{ url_for('fonction_audit.nouvelle_evaluation') }}" class="d-flex gap-2 flex-wrap mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="annee" value="{{ annee }}">
+        <button class="btn btn-sm btn-primary" name="type_evaluation" value="interne"><i class="fas fa-clipboard-check me-1"></i>Évaluation interne {{ annee }}</button>
+        <button class="btn btn-sm btn-outline-primary" name="type_evaluation" value="externe"><i class="fas fa-user-tie me-1"></i>Saisir une évaluation externe</button>
+      </form>
+      {% if etat.evaluations %}
+      <table class="table table-sm mb-0"><tbody>
+        {% for e in etat.evaluations %}
+        <tr><td><a href="{{ url_for('fonction_audit.evaluation', eval_id=e.id) }}">{{ 'Interne' if e.type_evaluation == 'interne' else 'Externe' }} {{ e.annee }}</a>
+              {% if e.evaluateur %}<div class="small text-secondary">{{ e.evaluateur }}</div>{% endif %}</td>
+            <td class="small">{{ conclusions.get(e.conclusion, '—') }}</td>
+            <td class="small text-end">{% if e.statut == 'valide' %}<span class="text-success">Validée</span>{% else %}<span class="text-secondary">Brouillon</span>{% endif %}</td></tr>
+        {% endfor %}
+      </tbody></table>
+      {% else %}<p class="text-secondary small mb-0">Aucune évaluation pour l'instant.</p>{% endif %}
+    {% endcall %}
+    </div>
+    <div class="col-lg-7">
+    {% call pg.carte('Ce que l\'outil observe, principe par principe (' ~ annee ~ ')') %}
+      {% for code, nom, principes in domaines %}
+        <div class="small fw-semibold text-uppercase text-secondary mt-2">Domaine {{ code }} — {{ nom }}</div>
+        {% for n, titre in principes %}{% if preuves.get(n) %}
+        <div class="fq-p"><strong>{{ n }}. {{ titre }}</strong><ul>{% for p in preuves[n] %}<li>{{ p }}</li>{% endfor %}</ul></div>
+        {% endif %}{% endfor %}
+      {% endfor %}
+      <p class="pg-second mt-2 mb-0">Ces observations aident l'évaluation ; elles ne remplacent pas le jugement de l'évaluateur. Les autres principes s'évaluent sur pièces.</p>
+    {% endcall %}
+    </div>
+  </div>
+</div>
+{% endblock %}

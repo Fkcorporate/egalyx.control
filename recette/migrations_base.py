@@ -33,8 +33,8 @@ from sqlalchemy import inspect, text  # noqa: E402
 import flask_migrate  # noqa: E402
 
 DOSSIER = os.path.join(app.root_path, 'migrations')
-TETE = 'egalyx_0005_satisfaction_audit'   # dernière révision (0001 : référence ; 0002 : heure, devise, lettres ; 0003 : statuts ;
-                                           # 0004 : dossier de mission figé ; 0005 : satisfaction des audités)
+TETE = 'egalyx_0012_redaction_rapport'     # dernière révision (0001 référence … 0005 satisfaction, 0006 pied de lettre,
+                                           # 0007-0009 appréciations, 0010 titre des lettres, 0011 fonction d'audit, 0012 rédaction du rapport)
 
 
 def tables():
@@ -123,8 +123,10 @@ with app.app_context():
     cfg = Config(os.path.join(DOSSIER, 'alembic.ini')); cfg.set_main_option('script_location', DOSSIER)
     sd = ScriptDirectory.from_config(cfg)
     verif('une seule tête de révision', sd.get_heads() == [TETE], str(sd.get_heads()))
-    verif('chaîne propre : 0001 -> 0002 -> 0003 -> 0004 -> 0005', [r.revision for r in sd.walk_revisions()] == [
-        TETE, 'egalyx_0004_dossier_fige', 'egalyx_0003_statuts', 'egalyx_0002_localisation_lettres', 'egalyx_0001_reference'])
+    verif('chaîne propre : 0001 -> … -> 0012', [r.revision for r in sd.walk_revisions()] == [
+        TETE, 'egalyx_0011_fonction_audit', 'egalyx_0010_lm_afficher_titre', 'egalyx_0009_appreciation_c2n', 'egalyx_0008_externe_entite',
+        'egalyx_0007_appreciation_reco', 'egalyx_0006_pied_lettre', 'egalyx_0005_satisfaction_audit', 'egalyx_0004_dossier_fige',
+        'egalyx_0003_statuts', 'egalyx_0002_localisation_lettres', 'egalyx_0001_reference'])
     try:
         with Muet():
             flask_migrate.downgrade(directory=DOSSIER, revision='base')

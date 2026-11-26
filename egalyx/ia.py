@@ -121,6 +121,36 @@ def ia_autorisee(u=None):
     return bool(callable(verifier) and verifier('can_use_ia_analysis'))   # inclut le module « ia » du client
 
 
+# ------------------------------------------------------------------ fonctions d'IA activables une à une (super admin)
+# (code, nom, description) — chaque fonction est aussi soumise à l'interrupteur général, au module « Analyse IA »
+# de l'organisation et à la permission « Utiliser l'analyse IA ».
+FONCTIONS = [
+    ('redaction_constats', 'Rédaction des constats',
+     "L'auditeur saisit ses notes brutes ; l'IA propose le constat structuré (fait, critère, cause, conséquence, "
+     "recommandation, gravité). L'auditeur relit et enregistre."),
+    ('preparation_mission', 'Préparation de la mission',
+     "À partir des risques du processus, des contrôles en place et des audits précédents, l'IA propose le programme "
+     "de travail (tests, échantillons, documents à demander) ; l'auditeur coche ce qu'il garde et crée les feuilles de travail."),
+    ('assistant_donnees', 'Assistant : réponses avec l’IA',
+     "L'assistant comprend les questions en langage courant et va chercher les données (risques, recommandations, "
+     "couverture d'audit, indicateurs…) avec les droits de l'utilisateur. Coupé : l'assistant répond quand même "
+     "aux questions courantes, sans IA, sans qu'aucune donnée ne sorte du serveur."),
+    ('premier_jet_rapport', 'Premier jet du rapport d’audit',
+     "Résumé exécutif et conclusion rédigés à partir des constats et recommandations de la mission ; "
+     "l'auditeur corrige puis valide. Seul le texte validé figure dans le rapport."),
+]
+CODES_FONCTIONS = {c for c, _n, _d in FONCTIONS}
+
+
+def fonction_activee_plateforme(code):
+    return bool((reglages().get('ia_fonctions') or {}).get(code, True))
+
+
+def fonction_active(code, u=None):
+    """Fonction d'IA utilisable par l'utilisateur : interrupteur de la fonction + les trois conditions générales."""
+    return code in CODES_FONCTIONS and fonction_activee_plateforme(code) and ia_autorisee(u)
+
+
 # ------------------------------------------------------------------ adresses dédiées à l'IA
 ENDPOINTS_IA = {
     'analyse_ia_dashboard', 'generer_kris_ia', 'appliquer_suggestion_kri_ia', 'suggestions_kris_fallback',
@@ -222,25 +252,65 @@ def neutraliser_services(module_app=None):
 @super_admin_requis
 def page():
     from models import Client
+    from egalyx import ia_passerelle
     if request.method == 'POST':
-        active = request.form.get('ia_active') == '1'
-        ecrire_reglage('ia_active', active)
-        journaliser('ia_plateforme_' + ('activee' if active else 'desactivee'), {}, client_id=None)
-        flash("Intelligence artificielle " + ("activée" if active else "désactivée sur toute la plateforme : "
-              "boutons et analyses d'IA ont disparu pour tous les clients (l'assistant répond depuis le centre d'aide)."), 'success')
+        action = request.form.get('action', 'plateforme')
+        if action == 'fournisseur':
+            f = request.form.get('fournisseur')
+            if f in ia_passerelle.FOURNISSEURS:
+                ecrire_reglage('ia_fournisseur', f)
+                journaliser('ia_fournisseur', {'fournisseur': f}, client_id=None)
+                info = ia_passerelle.FOURNISSEURS[f]
+                message = f"Fournisseur d'IA : {info['libelle']} ({info['pays']})."
+                if not ia_passerelle.cle(f):
+                    message += f" Attention : la variable {info['cle']} n'est pas définie sur le serveur ; en attendant, " + (
+                        'l’autre fournisseur est utilisé.' if ia_passerelle.effectif() else 'aucune IA ne peut répondre.')
+                flash(message, 'success' if ia_passerelle.cle(f) else 'warning')
+        elif action == 'masquage':
+            actif = request.form.get('ia_masquage') == '1'
+            ecrire_reglage('ia_masquage', actif)
+            journaliser('ia_masquage_' + ('active' if actif else 'coupe'), {}, client_id=None)
+            flash('Masquage des données sensibles ' + ('activé.' if actif else 'coupé : les données partent telles quelles chez le fournisseur.'),
+                  'success' if actif else 'warning')
+        elif action == 'fonctions':
+            choix = {c: (request.form.get('f_' + c) == '1') for c in CODES_FONCTIONS}
+            ecrire_reglage('ia_fonctions', choix)
+            journaliser('ia_fonctions', choix, client_id=None)
+            flash("Fonctions d'IA enregistrées.", 'success')
+        else:
+            active = request.form.get('ia_active') == '1'
+            ecrire_reglage('ia_active', active)
+            journaliser('ia_plateforme_' + ('activee' if active else 'desactivee'), {}, client_id=None)
+            flash("Intelligence artificielle " + ("activée" if active else "désactivée sur toute la plateforme : "
+                  "boutons et analyses d'IA ont disparu pour tous les clients (l'assistant répond depuis le centre d'aide)."), 'success')
         return redirect(url_for('.page'))
     from egalyx.modules_client import modules_du_client
     clients = Client.query.order_by(Client.nom).all()
     sans_ia = [c for c in clients if (modules_du_client(c) is not None and 'ia' not in modules_du_client(c))]
     return render_template('egalyx/ia_reglage.html', active=ia_plateforme_active(),
                            force_env=os.environ.get('EGALYX_IA', '1') == '0', clients=clients, sans_ia=sans_ia,
-                           nb_adresses=len(ENDPOINTS_IA), cle_openai=bool(os.environ.get('OPENAI_API_KEY')))
+                           nb_adresses=len(ENDPOINTS_IA), cle_openai=bool(os.environ.get('OPENAI_API_KEY')),
+                           passerelle=ia_passerelle.etat(), fournisseurs=ia_passerelle.FOURNISSEURS, fonctions=FONCTIONS,
+                           fonctions_actives={c: fonction_activee_plateforme(c) for c in CODES_FONCTIONS},
+                           derniers_appels=_derniers_appels())
+
+
+def _derniers_appels(n=15):
+    try:
+        from models import JournalActiviteClient, Client
+        lignes = JournalActiviteClient.query.filter_by(action='ia_appel').order_by(JournalActiviteClient.id.desc()).limit(n).all()
+        noms = {c.id: c.nom for c in Client.query.filter(Client.id.in_({l.client_id for l in lignes})).all()} if lignes else {}
+        return [{'date': getattr(l, 'created_at', None) or getattr(l, 'timestamp', None), 'organisation': noms.get(l.client_id, '—'),
+                 **(l.details or {})} for l in lignes]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def enregistrer(app):
     app.register_blueprint(bp)
     app.before_request(bloquer)
     app.jinja_env.globals['ia_active'] = ia_autorisee
+    app.jinja_env.globals['ia_fonction'] = fonction_active
     app.jinja_env.globals['ia_motifs_adresses'] = MOTIFS_ADRESSES
     faits = neutraliser_services(sys.modules.get(app.import_name))
     if faits:

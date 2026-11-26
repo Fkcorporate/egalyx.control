@@ -4654,6 +4654,8 @@ class Audit(db.Model):
     dossier_rouvert_le = db.Column(db.DateTime, nullable=True)       # dossier rouvert après le rapport définitif (egalyx/dossier_fige.py)
     dossier_rouvert_par_id = db.Column(db.Integer, nullable=True)
     dossier_rouvert_motif = db.Column(db.String(500), nullable=True)
+    entite_auditable_id = db.Column(db.Integer, nullable=True, index=True)   # univers d'audit (egalyx/fonction_audit.py)
+    redaction_rapport = db.Column(db.JSON, nullable=True)   # résumé exécutif et conclusion de la mission (egalyx/ia_audit.py)
     commentaires = db.Column(db.Text, nullable=True)   # écrit par l'application mais absent de la base (recette nov. 2026)
     reference = db.Column(db.String(50), nullable=False)
     titre = db.Column(db.String(200), nullable=False)
@@ -21720,6 +21722,63 @@ class DeclarationIndependance(db.Model):
     signe_le = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', foreign_keys=[user_id])
     __table_args__ = (db.UniqueConstraint('audit_id', 'user_id', name='uq_independance_audit_user'),)
+
+
+class EntiteAuditable(db.Model):
+    """Univers d'audit : ce que la fonction d'audit interne peut auditer (egalyx/fonction_audit.py)."""
+    __tablename__ = 'entites_auditables'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    nom = db.Column(db.String(200), nullable=False)
+    type_entite = db.Column(db.String(30), default='processus')   # processus, direction, filiale, systeme, projet, autre
+    processus_id = db.Column(db.Integer, nullable=True)           # ProcessusActivite
+    direction_id = db.Column(db.Integer, nullable=True)
+    responsable = db.Column(db.String(150))
+    niveau_risque = db.Column(db.String(10), default='moyen')     # eleve, moyen, faible
+    cycle_annees = db.Column(db.Integer)                          # vide : selon le niveau de risque (1, 2 ou 3 ans)
+    dernier_audit_manuel = db.Column(db.Date)                     # audit antérieur à l'outil
+    commentaire = db.Column(db.Text)
+    actif = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EvaluationQualiteAudit(db.Model):
+    """Évaluation de la conformité de la fonction d'audit interne aux normes de l'IIA (2024) :
+    interne (au moins annuelle) ou externe (au moins tous les 5 ans)."""
+    __tablename__ = 'evaluations_qualite_audit'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    type_evaluation = db.Column(db.String(10), nullable=False)    # interne, externe
+    annee = db.Column(db.Integer, nullable=False)
+    date_evaluation = db.Column(db.Date)
+    evaluateur = db.Column(db.String(200))                        # nom ou cabinet
+    reponses = db.Column(db.JSON)                                  # {numéro du principe: {'niveau': ..., 'commentaire': ..., 'action': ...}}
+    conclusion = db.Column(db.String(20))                         # conforme, partiel, non_conforme
+    synthese = db.Column(db.Text)
+    statut = db.Column(db.String(10), default='brouillon')        # brouillon, valide
+    valide_le = db.Column(db.DateTime)
+    valide_par_id = db.Column(db.Integer)
+    created_by = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CharteAudit(db.Model):
+    """Charte d'audit interne, par version ; une seule version approuvée en vigueur."""
+    __tablename__ = 'chartes_audit'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    version = db.Column(db.Integer, nullable=False)
+    texte = db.Column(db.Text)
+    statut = db.Column(db.String(12), default='brouillon')        # brouillon, approuvee, remplacee
+    approuvee_le = db.Column(db.Date)
+    approuvee_par = db.Column(db.String(200))                     # instance : conseil d'administration, comité d'audit…
+    revue_prevue = db.Column(db.Date)
+    created_by = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint('client_id', 'version', name='uq_charte_audit_version'),)
 
 
 class SatisfactionAudit(db.Model):

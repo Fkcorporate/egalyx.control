@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Univers d'audit{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ua-etat { display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem; white-space: nowrap; }
+  .ua-etat::before { content: ""; width: .55rem; height: .55rem; border-radius: 50%; background: currentColor; }
+  .ua-retard { color: #B42318; } .ua-bientot { color: #B54708; } .ua-en_cours { color: #175CD3; } .ua-ok { color: #067647; }
+  .ua-table td, .ua-table th { vertical-align: middle; }
+  .ua-table details summary { cursor: pointer; font-size: .8rem; color: var(--bs-link-color); list-style: none; }
+  .ua-form { background: var(--bs-tertiary-bg); border-radius: 8px; padding: .8rem; margin-top: .5rem; min-width: 520px; }
+</style>{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  {{ pg.entete("Univers d'audit", 'fa-sitemap', "Ce que l'audit interne peut auditer, avec le risque, le cycle et la date du dernier audit. Sert à bâtir le programme d'audit.") }}
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_qualite') }}"><i class="fas fa-award me-1"></i>Qualité de la fonction</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_charte') }}"><i class="fas fa-scroll me-1"></i>Charte d'audit</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('liste_programmes_audit') }}"><i class="fas fa-calendar-alt me-1"></i>Programme d'audit</a>
+  </div>
+  <div class="pg-kpis">
+    {{ pg.kpi('Entités', u.lignes|length) }}
+    {{ pg.kpi('Couvertes dans leur cycle', (u.couverture ~ ' %') if u.couverture is not none else '—') }}
+    {{ pg.kpi('À auditer (en retard ou jamais)', u.retard, '#b42318' if u.retard else none) }}
+    {{ pg.kpi('dont risque élevé', u.eleve_retard, '#b42318' if u.eleve_retard else none) }}
+  </div>
+
+  {% call pg.carte('Entités auditables') %}
+    {% if u.lignes %}
+    <div class="table-responsive">
+    <table class="table table-sm ua-table">
+      <thead><tr><th>Entité</th><th>Type</th><th>Risque</th><th>Cycle</th><th>Dernier audit</th><th>Prochain au plus tard</th><th>État</th><th></th></tr></thead>
+      <tbody>
+      {% for x in u.lignes %}{% set e = x.e %}
+        <tr>
+          <td><strong>{{ e.nom }}</strong>{% if e.responsable %}<div class="small text-secondary">{{ e.responsable }}</div>{% endif %}</td>
+          <td class="small">{{ types.get(e.type_entite, 'Autre') }}</td>
+          <td class="small">{{ niveaux.get(e.niveau_risque, 'Moyen') }}</td>
+          <td class="small">{{ x.cycle }} an{{ 's' if x.cycle > 1 }}{% if not e.cycle_annees %} <span class="text-secondary">(selon risque)</span>{% endif %}</td>
+          <td class="small">{% if x.dernier %}{{ x.dernier.strftime('%d/%m/%Y') }}{% if x.audits %}<div class="text-secondary">{{ x.audits[0].reference }}</div>{% endif %}{% else %}—{% endif %}</td>
+          <td class="small">{{ x.echeance.strftime('%d/%m/%Y') if x.echeance else '—' }}</td>
+          <td><span class="ua-etat ua-{{ x.etat }}">{{ x.libelle }}</span></td>
+          <td>
+            <details><summary>Modifier</summary>
+              <form method="post" class="ua-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entite_id" value="{{ e.id }}">
+                <div class="row g-2">
+                  <div class="col-md-6"><label class="form-label small mb-0">Nom</label><input class="form-control form-control-sm" name="nom" value="{{ e.nom }}" required maxlength="200"></div>
+                  <div class="col-md-6"><label class="form-label small mb-0">Responsable</label><input class="form-control form-control-sm" name="responsable" value="{{ e.responsable or '' }}" maxlength="150"></div>
+                  <div class="col-md-4"><label class="form-label small mb-0">Type</label><select class="form-select form-select-sm" name="type_entite">{% for k, v in types.items() %}<option value="{{ k }}" {{ 'selected' if k == e.type_entite }}>{{ v }}</option>{% endfor %}</select></div>
+                  <div class="col-md-4"><label class="form-label small mb-0">Risque</label><select class="form-select form-select-sm" name="niveau_risque">{% for k, v in niveaux.items() %}<option value="{{ k }}" {{ 'selected' if k == e.niveau_risque }}>{{ v }}</option>{% endfor %}</select></div>
+                  <div class="col-md-4"><label class="form-label small mb-0">Cycle (ans)</label><input class="form-control form-control-sm" type="number" min="1" max="10" name="cycle_annees" value="{{ e.cycle_annees or '' }}" placeholder="selon risque"></div>
+                  <div class="col-md-6"><label class="form-label small mb-0">Dernier audit hors outil</label><input class="form-control form-control-sm" type="date" name="dernier_audit_manuel" value="{{ e.dernier_audit_manuel.isoformat() if e.dernier_audit_manuel else '' }}" max="{{ aujourdhui.isoformat() }}"></div>
+                  <div class="col-12"><label class="form-label small mb-0">Commentaire</label><textarea class="form-control form-control-sm" name="commentaire" rows="2">{{ e.commentaire or '' }}</textarea></div>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                  <button class="btn btn-sm btn-primary" name="action" value="modifier">Enregistrer</button>
+                  <button class="btn btn-sm btn-outline-secondary" name="action" value="retirer" formnovalidate>Retirer de l'univers</button>
+                </div>
+              </form>
+              <form method="post" class="ua-form d-flex gap-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entite_id" value="{{ e.id }}">
+                <div class="flex-grow-1"><label class="form-label small mb-0">Rattacher un audit à cette entité</label>
+                  <select class="form-select form-select-sm" name="audit_id">{% for a in u.audits|sort(attribute='id', reverse=true) %}<option value="{{ a.id }}">{{ a.reference }} — {{ a.titre }}</option>{% endfor %}</select></div>
+                <button class="btn btn-sm btn-outline-primary" name="action" value="rattacher">Rattacher</button>
+              </form>
+            </details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="pg-second mb-0">Cycle par défaut selon le risque : élevé {{ cycle_defaut.eleve }} an, moyen {{ cycle_defaut.moyen }} ans, faible {{ cycle_defaut.faible }} ans.
+      Le dernier audit est celui dont le rapport définitif est émis, parmi les audits rattachés à l'entité ou à son processus.</p>
+    {% else %}
+    <p class="text-secondary mb-0">L'univers est vide. Ajoutez vos processus et directions en un clic ci-dessous, ou une entité à la main.</p>
+    {% endif %}
+  {% endcall %}
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+    {% call pg.carte('Ajouter depuis vos processus et directions') %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="source" value="processus" id="src_p" checked><label class="form-check-label" for="src_p">Processus (logigrammes)</label></div>
+        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="source" value="direction" id="src_d"><label class="form-check-label" for="src_d">Directions</label></div>
+        <button class="btn btn-sm btn-outline-primary" name="action" value="importer"><i class="fas fa-file-import me-1"></i>Ajouter ceux qui manquent</button>
+        <div class="pg-second mt-2">Créés avec un risque « moyen » : ajustez ensuite le risque de chacun.</div>
+      </form>
+    {% endcall %}
+    </div>
+    <div class="col-lg-7">
+    {% call pg.carte('Ajouter une entité') %}
+      <form method="post" class="row g-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-6"><label class="form-label small mb-0" for="n_nom">Nom</label><input class="form-control form-control-sm" id="n_nom" name="nom" required maxlength="200" placeholder="Ex. : Filiale Côte d'Ivoire, Core banking"></div>
+        <div class="col-md-3"><label class="form-label small mb-0" for="n_type">Type</label><select class="form-select form-select-sm" id="n_type" name="type_entite">{% for k, v in types.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+        <div class="col-md-3"><label class="form-label small mb-0" for="n_risque">Risque</label><select class="form-select form-select-sm" id="n_risque" name="niveau_risque">{% for k, v in niveaux.items() %}<option value="{{ k }}" {{ 'selected' if k == 'moyen' }}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="col-md-6"><label class="form-label small mb-0" for="n_resp">Responsable</label><input class="form-control form-control-sm" id="n_resp" name="responsable" maxlength="150"></div>
+        <div class="col-md-3"><label class="form-label small mb-0" for="n_cycle">Cycle (ans)</label><input class="form-control form-control-sm" id="n_cycle" type="number" min="1" max="10" name="cycle_annees" placeholder="selon risque"></div>
+        <div class="col-md-3"><label class="form-label small mb-0" for="n_der">Dernier audit hors outil</label><input class="form-control form-control-sm" id="n_der" type="date" name="dernier_audit_manuel" max="{{ aujourdhui.isoformat() }}"></div>
+        <div class="col-12"><button class="btn btn-sm btn-primary" name="action" value="ajouter"><i class="fas fa-plus me-1"></i>Ajouter</button></div>
+      </form>
+    {% endcall %}
+    </div>
+  </div>
+
+  {% if u.inactives %}
+  {% call pg.carte('Entités retirées de l\'univers') %}
+    <ul class="list-unstyled mb-0">{% for x in u.inactives %}
+      <li class="d-flex align-items-center gap-2 mb-1"><span>{{ x.e.nom }}</span>
+        <form method="post" class="m-0"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="entite_id" value="{{ x.e.id }}">
+          <button class="btn btn-link btn-sm p-0" name="action" value="activer">Remettre</button></form></li>{% endfor %}</ul>
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -35,6 +35,15 @@ import logging
 
 journal = logging.getLogger('egalyx')
 
+# Passerelle d'IA (egalyx/ia_passerelle.py) : posée dès l'import d'egalyx, c'est-à-dire avant que app.py et les
+# services lisent la clé d'IA ; toutes les demandes d'IA passent ensuite par elle (fournisseur, masquage, journal).
+try:
+    from egalyx import ia_passerelle as _ia_passerelle
+    _ia_passerelle.preparer_environnement()
+    _ia_passerelle.installer()
+except Exception as _e:  # noqa: BLE001
+    journal.warning("Passerelle d'IA non installée : %s", _e)
+
 
 def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, construire_dashboard=None):
     from egalyx import (base_donnees, double_auth, sso, parametres_risque, alerte, tiers, signature,
@@ -78,6 +87,14 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     dossier_fige.enregistrer(app)                   # dossier de mission figé après le rapport définitif
     from egalyx import satisfaction_audit
     satisfaction_audit.enregistrer(app)             # avis des audités en fin de mission
+    from egalyx import fonction_audit
+    fonction_audit.enregistrer(app)                 # univers d'audit, qualité de la fonction (IIA 2024), charte
+    from egalyx import carto_processus
+    carto_processus.enregistrer(app)                # cartographie des processus (module sur activation du super admin)
+    from egalyx import ia_audit
+    ia_audit.enregistrer(app)                       # IA au cœur de l'audit : constats depuis les notes, premier jet du rapport
+    from egalyx import assistant_donnees
+    assistant_donnees.enregistrer(app)              # assistant : tous les outils pour l'IA, couverture d'audit, indicateurs
     from egalyx import photo_profil
     photo_profil.enregistrer(app)
     try:                                   # paquet facultatif : /ci (301 vers l'accueil), /debug/create-user-form (404)

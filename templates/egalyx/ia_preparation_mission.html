@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Préparation de la mission — {{ audit.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .pm-origine { display: none; border-radius: 8px; padding: .55rem .75rem; font-size: .84rem; margin: 1rem 0; }
+  .pm-origine.ia { display: block; background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+  .pm-origine.automatique { display: block; background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  .pm-test { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .7rem .85rem; margin-bottom: .55rem; background: var(--bs-body-bg); }
+  .pm-test.retire { opacity: .5; background: var(--bs-tertiary-bg); }
+  .pm-test-tete { display: flex; gap: .6rem; align-items: flex-start; }
+  .pm-test-tete input[type=text] { font-weight: 600; border-color: transparent; padding-left: .3rem; }
+  .pm-test-tete input[type=text]:hover, .pm-test-tete input[type=text]:focus { border-color: var(--bs-border-color); }
+  .pm-meta { display: flex; gap: .4rem; flex-wrap: wrap; margin: .35rem 0 0 1.9rem; font-size: .75rem; }
+  .pm-meta span { background: var(--bs-tertiary-bg); border-radius: 999px; padding: .1rem .55rem; color: var(--bs-secondary-color); }
+  .pm-meta span.crit-critique { background: #fde8ea; color: #a51d2d; } .pm-meta span.crit-eleve { background: #ffecdc; color: #a04800; }
+  .pm-test details { margin: .4rem 0 0 1.9rem; font-size: .84rem; }
+  .pm-test details summary { color: var(--bs-primary); cursor: pointer; font-size: .8rem; }
+  .pm-test dl { margin: .5rem 0 0; } .pm-test dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--bs-secondary-color); margin-top: .45rem; }
+  .pm-test dd { margin: 0; white-space: pre-line; }
+  .pm-barre { position: sticky; bottom: 0; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); padding: .7rem 0; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; z-index: 3; }
+  .pm-risques li { font-size: .84rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1060px;">
+  {% call pg.entete('Préparation de la mission', 'fa-route', audit.reference ~ ' · ' ~ audit.titre, retour=url_for('detail_audit', id=audit.id), libelle_retour="Fiche de l'audit") %}{% endcall %}
+
+  {% call pg.carte('Ce que la proposition va utiliser', aide='Données de votre organisation, masquées avant tout envoi à l’IA') %}
+    <div class="pg-kpis mb-2">
+      {{ pg.kpi('Risques du processus', ctx.risques|length) }}
+      {{ pg.kpi('Contrôles en place', ctx.controles|length) }}
+      {{ pg.kpi('Audits précédents', ctx.audits_precedents|length) }}
+      {{ pg.kpi('Recommandations ouvertes', ctx.audits_precedents|map(attribute='recommandations_ouvertes')|map('length')|sum) }}
+    </div>
+    {% if ctx.risques %}
+    <details><summary class="small">Voir les risques retenus</summary>
+      <ul class="pm-risques mt-2 mb-0">{% for r in ctx.risques %}<li><strong>{{ r.reference }}</strong> {{ r.intitule }} <span class="pg-second">· {{ r.niveau }}</span></li>{% endfor %}</ul>
+    </details>
+    {% else %}
+    <p class="small text-warning-emphasis mb-0"><i class="fas fa-circle-info me-1"></i>Aucun risque trouvé pour cette mission : associez des risques à l’audit
+      (fiche de l’audit) ou rattachez-les au processus audité dans la cartographie des risques, pour un programme plus précis.</p>
+    {% endif %}
+    <p class="pg-second mb-0 mt-2">Processus audité : {{ ctx.mission.processus or 'non précisé' }}.{% if nb_feuilles %} La mission a déjà {{ nb_feuilles }} feuille(s) de travail : les nouvelles s’ajoutent, rien n’est remplacé.{% endif %}</p>
+  {% endcall %}
+
+  {% if fige %}
+  <div class="alert alert-secondary small"><i class="fas fa-lock me-2"></i>Le rapport définitif est émis : le dossier est figé.</div>
+  {% else %}
+  <button type="button" class="btn btn-primary" id="pmProposer">
+    <span class="pm-libelle"><i class="fas {{ 'fa-wand-magic-sparkles' if ia_ok else 'fa-list-check' }} me-1"></i>{{ 'Proposer le programme de travail' if ia_ok else 'Proposer un programme type (sans IA)' }}</span>
+    <span class="pm-attente d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Préparation en cours…</span>
+  </button>
+  <span class="pg-second ms-2">{{ 'L’IA propose ; vous cochez les tests à garder, puis les feuilles de travail sont créées.' if ia_ok else 'Un test par contrôle, échantillon selon sa fréquence ; un test de suivi par recommandation ouverte.' }}</span>
+
+  <div class="pm-origine" id="pmOrigine" role="status"></div>
+  <div id="pmResultat" class="d-none">
+    <div class="row g-3">
+      <div class="col-md-6">{% call pg.carte('Objectifs de la mission') %}<ul class="small mb-0" id="pmObjectifs"></ul>{% endcall %}</div>
+      <div class="col-md-6">{% call pg.carte('Points d’attention') %}<ul class="small mb-0" id="pmAttention"></ul>{% endcall %}</div>
+    </div>
+    {% call pg.carte('Tests proposés', aide='Décochez ce que vous ne gardez pas ; le titre se modifie directement') %}
+      <div id="pmTests"></div>
+    {% endcall %}
+    {% call pg.carte('Documents à demander aux audités', aide='Créés en liste de contrôle dans une feuille de travail') %}
+      <div id="pmDocuments"></div>
+    {% endcall %}
+    <div class="pm-barre">
+      <button type="button" class="btn btn-primary" id="pmCreer"><i class="fas fa-file-circle-plus me-1"></i>Créer les feuilles de travail</button>
+      <span class="small" id="pmTotal"></span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{% if not fige %}
+<script>
+(function () {
+  var CSRF = function () { return document.querySelector('meta[name="csrf-token"]').content; };
+  var b = document.getElementById('pmProposer'), zone = document.getElementById('pmOrigine'), res = document.getElementById('pmResultat');
+  var PROG = null, ORIGINE = '';
+  var CRIT = { critique: 'critique', eleve: 'élevée', moyen: 'moyenne', faible: 'faible' };
+  var METH = { aleatoire: 'aléatoire', systematique: 'systématique', jugement: 'à dire d’expert', exhaustif: 'exhaustif' };
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  function liste(id, items) { var ul = document.getElementById(id); ul.innerHTML = ''; (items || []).forEach(function (x) { ul.appendChild(el('li', null, x)); });
+    if (!(items || []).length) ul.appendChild(el('li', 'text-secondary', 'Aucun.')); }
+  function total() {
+    var n = 0, j = 0;
+    document.querySelectorAll('.pm-test').forEach(function (d, i) { var c = d.querySelector('input[type=checkbox]').checked; d.classList.toggle('retire', !c);
+      if (c) { n++; j += +PROG.tests[i].jours || 0; } });
+    document.getElementById('pmTotal').textContent = n + ' test(s) retenu(s) · charge estimée ' + (Math.round(j * 10) / 10).toString().replace('.', ',') + ' jour(s)';
+    document.getElementById('pmCreer').disabled = !n;
+  }
+  function afficher(p) {
+    PROG = p; liste('pmObjectifs', p.objectifs); liste('pmAttention', p.points_attention);
+    var t = document.getElementById('pmTests'); t.innerHTML = '';
+    p.tests.forEach(function (x, i) {
+      var d = el('div', 'pm-test'), tete = el('div', 'pm-test-tete');
+      var cb = el('input', 'form-check-input mt-2'); cb.type = 'checkbox'; cb.checked = true; cb.id = 'pmT' + i; cb.setAttribute('aria-label', 'Garder le test ' + (i + 1));
+      cb.addEventListener('change', total);
+      var ti = el('input', 'form-control form-control-sm'); ti.type = 'text'; ti.value = x.titre; ti.maxLength = 190; ti.setAttribute('aria-label', 'Titre du test ' + (i + 1));
+      ti.addEventListener('input', function () { x.titre = ti.value; });
+      tete.appendChild(cb); tete.appendChild(ti); d.appendChild(tete);
+      var meta = el('div', 'pm-meta');
+      if (x.risque_ref) meta.appendChild(el('span', null, 'Risque ' + x.risque_ref));
+      if (x.controle_ref) meta.appendChild(el('span', null, 'Contrôle ' + x.controle_ref));
+      meta.appendChild(el('span', 'crit-' + x.criticite, 'Criticité ' + (CRIT[x.criticite] || x.criticite)));
+      if (x.taille_echantillon) meta.appendChild(el('span', null, 'Échantillon ' + x.taille_echantillon + ' · ' + (METH[x.methode] || x.methode)));
+      if (x.jours) meta.appendChild(el('span', null, String(x.jours).replace('.', ',') + ' j'));
+      d.appendChild(meta);
+      var det = el('details'); det.appendChild(el('summary', null, 'Objectif, procédure, critères, pièces'));
+      var dl = el('dl');
+      [['Objectif', x.objectif], ['Procédure', x.procedure], ['Critères d’acceptation', x.criteres_acceptation], ['Échantillon', x.echantillon],
+       ['Période', x.periode], ['Pièces à obtenir', (x.pieces || []).join(' ; ')]].forEach(function (kv) {
+        if (kv[1]) { dl.appendChild(el('dt', null, kv[0])); dl.appendChild(el('dd', null, kv[1])); } });
+      det.appendChild(dl); d.appendChild(det); t.appendChild(d);
+    });
+    var docs = document.getElementById('pmDocuments'); docs.innerHTML = '';
+    (p.documents_a_demander || []).forEach(function (x, i) {
+      var w = el('div', 'form-check'), c = el('input', 'form-check-input'); c.type = 'checkbox'; c.checked = true; c.id = 'pmD' + i; c.value = x;
+      var l = el('label', 'form-check-label small', x); l.htmlFor = c.id; w.appendChild(c); w.appendChild(l); docs.appendChild(w);
+    });
+    if (!(p.documents_a_demander || []).length) docs.appendChild(el('p', 'pg-second mb-0', 'Aucun document proposé.'));
+    res.classList.remove('d-none'); total();
+  }
+  function attente(btn, oui) { btn.disabled = oui; var l = btn.querySelector('.pm-libelle'), a = btn.querySelector('.pm-attente'); if (l && a) { l.classList.toggle('d-none', oui); a.classList.toggle('d-none', !oui); } }
+  b.addEventListener('click', function () {
+    if (PROG && !confirm('Remplacer la proposition affichée ?')) return;
+    attente(b, true); zone.className = 'pm-origine';
+    fetch({{ url_for('ia_audit.preparation_proposer', audit_id=audit.id)|tojson }}, { method: 'POST', headers: { 'X-CSRFToken': CSRF(), 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.success) { zone.className = 'pm-origine automatique'; zone.textContent = j.error || 'Proposition impossible.'; return; }
+        ORIGINE = j.origine; zone.className = 'pm-origine ' + j.origine; zone.textContent = j.origine_libelle; afficher(j);
+      })
+      .catch(function () { zone.className = 'pm-origine automatique'; zone.textContent = 'Proposition impossible (connexion).'; })
+      .finally(function () { attente(b, false); });
+  });
+  document.getElementById('pmCreer').addEventListener('click', function () {
+    var garde = PROG.tests.filter(function (_x, i) { return document.getElementById('pmT' + i).checked; });
+    var docs = Array.prototype.filter.call(document.querySelectorAll('#pmDocuments input:checked'), function () { return true; }).map(function (c) { return c.value; });
+    if (!garde.length || !confirm('Créer ' + garde.length + ' test(s) dans les feuilles de travail de la mission ?')) return;
+    var c = this; c.disabled = true;
+    fetch({{ url_for('ia_audit.preparation_creer', audit_id=audit.id)|tojson }}, { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF(), 'Accept': 'application/json' },
+          body: JSON.stringify({ tests: garde, documents: docs, origine: ORIGINE }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j.success) location.href = j.retour; else { c.disabled = false; alert(j.error || 'Création impossible.'); } })
+      .catch(function () { c.disabled = false; alert('Création impossible (connexion).'); });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
