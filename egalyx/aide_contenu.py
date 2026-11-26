@@ -801,6 +801,19 @@ ARTICLES = [
       perms=['can_use_analyse_donnees'],
       questions=['analyse de donnees', 'importer les donnees fournisseurs', 'detecter les doublons de factures', 'loi de benford']),
 
+    A('profil_reglementaire', 'admin', 'Profil réglementaire : Côte d’Ivoire / UEMOA ou France / UE',
+      'Chaque organisation a un profil réglementaire, choisi par l’éditeur : « Côte d’Ivoire / UEMOA (OHADA) » ou « France / Union européenne ». '
+      'Il adapte l’outil à vos normes : devise, référentiel comptable, jours fériés, lutte contre le blanchiment, références citées.',
+      etapes=['Consultez votre profil : **Administration > Heure et devise**.',
+              'Côte d’Ivoire / UEMOA : FCFA, SYSCOHADA révisé, CENTIF et loi uniforme LBC/FT, BCEAO, ARTCI.',
+              'France / UE : euro, plan comptable général et FEC, Tracfin et Code monétaire et financier, ACPR, RGPD.',
+              'Dans l’analyse de données, les seuils proposés sont dans votre devise, les jours fériés et les comptes sensibles sont ceux '
+              'de votre pays ; vous pouvez modifier chaque réglage.'],
+      notes=['Pour changer de profil, contactez l’éditeur (super admin).', 'Les seuils réglementaires évoluent : vérifiez-les chaque année.'],
+      mots=['profil', 'norme', 'normes', 'pays', 'france', 'cote d ivoire', 'uemoa', 'ohada', 'syscohada', 'pcg', 'fec', 'euro', 'fcfa',
+            'centif', 'tracfin', 'bceao', 'acpr', 'rgpd', 'artci', 'reglementation'],
+      perms=[], questions=['changer de pays', 'profil france', 'normes ohada', 'passer en euro']),
+
     A('analyse_sources', 'controle', 'Connecter vos systèmes et programmer l’audit continu',
       'Les données d’audit peuvent être lues directement dans vos systèmes (sans export manuel), et les tests relancés '
       'automatiquement chaque jour, semaine ou mois : c’est l’audit continu.',

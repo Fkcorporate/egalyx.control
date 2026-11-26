@@ -274,10 +274,17 @@ def _reference(cid):
 
 
 def _devise(audit):
+    """Symbole de la devise de l'organisation (FCFA, €…), d'après ses réglages « Heure et devise »."""
     try:
-        return (getattr(audit.client, 'devise', None) or 'FCFA')[:10]
+        from egalyx.localisation import devise
+        return (devise(audit.client_id) or 'FCFA')[:10]
     except Exception:  # noqa: BLE001
         return 'FCFA'
+
+
+def _pr():
+    from egalyx import profil_reglementaire
+    return profil_reglementaire
 
 
 def _json(obj, champ):
@@ -394,13 +401,14 @@ def page(analyse_id):
         if cloture is None:
             cloture, cloture_auto = cloture_proposee(donnees), True
     return render_template('egalyx/analyse_donnees.html', audit=a, an=an, jeux=jeux, etape=etape, fige=_fige(a),
-                           JEUX=am.JEUX, ORDRE=am.ORDRE_JEUX, TESTS=am.TESTS, DOMAINES=am.DOMAINES, NIVEAUX=am.NIVEAUX,
+                           JEUX=am.JEUX, ORDRE=am.ORDRE_JEUX, TESTS=_pr().tests(a.client_id), DOMAINES=am.DOMAINES, NIVEAUX=am.NIVEAUX,
                            resultats=resultats, applicables=applicables, ia_ok=ia_active(), fr=montant_fr, CYCLES=am.CYCLES,
                            cloture=cloture, cloture_auto=cloture_auto,
                            conservation=conservation_jours(a.client_id), conservations=CONSERVATIONS,
                            chiffrement=_m()._fernet() is not None, peut_regler=_ap().est_gestionnaire_audit(current_user),
                            nom=lambda uid: nom_personne(_m().db.session.get(_m().User, uid)) if uid else '',
-                           parametres=lambda t: am.parametres_effectifs(t, (an.parametres or {}).get(t['code'])))
+                           parametres=lambda t: am.parametres_effectifs(t, (an.parametres or {}).get(t['code'])),
+                           profil=_pr().profil(a.client_id))
 
 
 # ---------------------------------------------------------------------- 1. import
@@ -615,7 +623,7 @@ def executer(analyse_id):
     f = request.form
     choix = [t['code'] for t in am.TESTS if f.get('t_' + t['code'])]
     parametres = {}
-    for t in am.TESTS:
+    for t in _pr().tests(a.client_id):
         brut = {code: f.get(f'p_{t["code"]}_{code}') for code, *_r in t['params'] if f.get(f'p_{t["code"]}_{code}') is not None}
         parametres[t['code']] = am.parametres_effectifs(t, brut)
     cloture = am.lire_date((f.get('cloture') or '').strip())
@@ -635,7 +643,7 @@ def executer(analyse_id):
         flash('Aucune donnée prête : importez au moins un fichier et validez la correspondance des colonnes.', 'warning')
         return redirect(url_for('.page', analyse_id=an.id, etape='donnees'))
     debut = time.time()
-    resultats = am.executer(donnees, choix, parametres, devise=an.devise or 'FCFA', cloture=cloture)
+    resultats = am.executer(donnees, choix, parametres, devise=an.devise or 'FCFA', cloture=cloture, defauts=_pr().defauts_tests(a.client_id))
     an.resultats = resultats
     an.execution = {'le': datetime.utcnow().isoformat(timespec='seconds'), 'par': current_user.id, 'duree': round(time.time() - debut, 2),
                     'version': 'lot2-2026.11', 'illisibles': illisibles, 'cloture': cloture.isoformat() if cloture else None,
@@ -675,7 +683,7 @@ def detail_test(analyse_id, code):
     r = _resultat(an, code)
     q = (request.args.get('q') or '').strip().lower()
     anomalies = [x for x in r['anomalies'] if not q or q in (x['ref'] + ' ' + x['tiers'] + ' ' + x['motif']).lower()]
-    return render_template('egalyx/analyse_donnees_test.html', audit=a, an=an, r=r, test=am.TESTS_PAR_CODE[code], anomalies=anomalies, q=q,
+    return render_template('egalyx/analyse_donnees_test.html', audit=a, an=an, r=r, test=_pr().tests_par_code(a.client_id)[code], anomalies=anomalies, q=q,
                            JEUX=am.JEUX, NIVEAUX=am.NIVEAUX, fr=montant_fr, fige=_fige(a), lien=(an.liens or {}).get(code, {}),
                            ia_ok=ia_active())
 
@@ -727,7 +735,7 @@ def creer_feuille(analyse_id, code):
     """Feuille de travail : test exhaustif par analyse de données, les anomalies étant les éléments à examiner."""
     an, a = _analyse(analyse_id)
     r = _resultat(an, code)
-    t = am.TESTS_PAR_CODE[code]
+    t = _pr().tests_par_code(a.client_id)[code]
     if not _modifiable(an, a):
         return redirect(url_for('.detail_test', analyse_id=an.id, code=code))
     m = _m()
@@ -813,7 +821,7 @@ def echantillon(analyse_id):
 
 # ---------------------------------------------------------------------- constat
 def constat_automatique(an, r):
-    t = am.TESTS_PAR_CODE[r['code']]
+    t = _pr().tests_par_code(an.client_id)[r['code']]
     jeu = _jeu_principal(r)
     exemples = '; '.join(f'{x["ref"] or x["tiers"]} ({_date_fr(x["date"])}{", " + montant_fr(x["montant"], an.devise) if x["montant"] else ""}) : {x["motif"]}'
                          for x in r['anomalies'][:5])
@@ -873,7 +881,7 @@ def constat(analyse_id, code):
         m.db.session.commit()
         flash(f'Constat {c.reference} créé sur la mission (statut « à analyser »).', 'success')
         return redirect(url_for('detail_audit', id=a.id) + '#constatations')
-    return render_template('egalyx/analyse_donnees_constat.html', audit=a, an=an, r=r, test=am.TESTS_PAR_CODE[code],
+    return render_template('egalyx/analyse_donnees_constat.html', audit=a, an=an, r=r, test=_pr().tests_par_code(a.client_id)[code],
                            c=constat_automatique(an, r), ia_ok=ia_active(), fige=_fige(a), fr=montant_fr)
 
 
@@ -885,7 +893,7 @@ def constat_ia(analyse_id, code):
     if not ia_active():
         return jsonify({'success': False, 'error': "L'IA n'est pas activée pour l'analyse de données."}), 403
     base = constat_automatique(an, r)
-    t = am.TESTS_PAR_CODE[code]
+    t = _pr().tests_par_code(a.client_id)[code]
     notes = (f'Résultat d’un test d’analyse de données : {t["titre"]}. {base["fait"]}\nRègle attendue (bibliothèque) : {t["critere"]}\n'
              f'Risque (bibliothèque) : {t["consequence"]}')
     from egalyx.ia_audit import proposer_constat
@@ -986,7 +994,8 @@ def export(analyse_id):
         if all(jeux.get(x['type']) and jeux[x['type']].empreinte == x['empreinte'] for x in (an.execution or {}).get('jeux', [])):
             donnees, ill = _donnees(an, jeux)
             if not ill:
-                complet = am.executer(donnees, tronques, an.parametres or {}, an.devise or 'FCFA', limite=10 ** 7, cloture=cloture_de(an))
+                complet = am.executer(donnees, tronques, an.parametres or {}, an.devise or 'FCFA', limite=10 ** 7, cloture=cloture_de(an),
+                                      defauts=_pr().defauts_tests(a.client_id))
     wb = Workbook()
     ws = wb.active
     ws.title = 'Synthèse'

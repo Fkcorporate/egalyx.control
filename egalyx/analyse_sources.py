@@ -595,7 +595,9 @@ def executer_programme(prog, declenchement='automatique', par_id=None, aujourd_h
             donnees[j] = df
             jeux.append({'type': j, 'libelle': am.JEUX[j]['libelle'], 'lignes': q['lignes'], 'empreinte': am.empreinte(octets),
                          'avertissements': q['avertissements'][:5], 'total': q.get('total')})
-        resultats = am.executer(donnees, prog.tests or [], prog.parametres or {}, devise=_devise(prog.client_id), limite=200, cloture=fin)
+        from egalyx import profil_reglementaire as pr
+        resultats = am.executer(donnees, prog.tests or [], prog.parametres or {}, devise=_devise(prog.client_id), limite=200, cloture=fin,
+                                defauts=pr.defauts_tests(prog.client_id))
         precedentes = set((prog.etat or {}).get('cles') or [])
         actuelles, nouvelles = set(), []
         for code, r in resultats.items():
@@ -646,9 +648,8 @@ def executer_programme(prog, declenchement='automatique', par_id=None, aujourd_h
 
 
 def _devise(cid):
-    m = _m()
-    c = m.db.session.get(m.Client, cid)
-    return (getattr(c, 'devise', None) or 'FCFA')[:10]
+    from egalyx.localisation import devise
+    return (devise(cid) or 'FCFA')[:10]
 
 
 def relever_programmes(app, maintenant=None):

@@ -2452,9 +2452,10 @@ def manquants(test, c):
     return manque
 
 
-def parametres_effectifs(test, valeurs):
+def parametres_effectifs(test, valeurs, defauts=None):
     res = {}
     for code, _lib, defaut, _aide in test['params']:
+        defaut = (defauts or {}).get(code, defaut)          # défaut du profil réglementaire (devise, jours fériés…)
         v = (valeurs or {}).get(code, defaut)
         if isinstance(defaut, (int, float)):
             x = lire_montant(v) if isinstance(v, str) else v
@@ -2465,14 +2466,14 @@ def parametres_effectifs(test, valeurs):
     return res
 
 
-def executer(donnees, choix, parametres=None, devise='FCFA', limite=None, cloture=None):
+def executer(donnees, choix, parametres=None, devise='FCFA', limite=None, cloture=None, defauts=None):
     """Lance les tests choisis. Renvoie {code: résultat}. Ne lève jamais d'erreur pour un test isolé."""
     c = Contexte(donnees, devise, cloture)
     resultats = {}
     for t in TESTS:
         if t['code'] not in choix:
             continue
-        p = parametres_effectifs(t, (parametres or {}).get(t['code']))
+        p = parametres_effectifs(t, (parametres or {}).get(t['code']), (defauts or {}).get(t['code']))
         r = {'code': t['code'], 'titre': t['titre'], 'domaine': t['domaine'], 'niveau': t['niveau'], 'parametres': p,
              'statut': 'ok', 'raison': '', 'population': 0, 'nb': 0, 'cas': 0, 'montant': 0.0, 'anomalies': [], 'tableau': None}
         manque = manquants(t, c)

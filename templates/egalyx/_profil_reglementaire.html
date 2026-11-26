@@ -1,0 +1,45 @@
+{# Profil réglementaire de l'organisation. Variables : client, modifiable (super admin). #}
+{% set pr = profil_de(client.id) %}
+<style>
+  .prf-choix { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .9rem; }
+  .prf-carte { border: 1px solid var(--bs-border-color); border-radius: 12px; padding: .9rem 1rem; display: block; cursor: pointer; position: relative; background: var(--bs-body-bg); }
+  .prf-carte:has(input:checked) { border-color: var(--bs-primary); box-shadow: 0 0 0 2px var(--bs-primary-bg-subtle); }
+  .prf-carte input { position: absolute; top: 1rem; right: 1rem; }
+  .prf-carte h3 { font-size: .98rem; font-weight: 650; margin: 0 1.6rem .45rem 0; display: flex; align-items: center; gap: .5rem; }
+  .prf-code { font-size: .7rem; font-weight: 700; border-radius: 4px; padding: .1rem .35rem; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); letter-spacing: .02em; }
+  .prf-carte dl { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .7rem; font-size: .8rem; margin: 0; }
+  .prf-carte dt { color: var(--bs-secondary-color); font-weight: 500; }
+  .prf-carte dd { margin: 0; }
+</style>
+{% if modifiable %}
+<form method="POST" action="{{ url_for('profil_reglementaire.choisir', client_id=client.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% endif %}
+  <div class="prf-choix" role="radiogroup" aria-label="Profil réglementaire">
+  {% for code, p in PROFILS_REGLEMENTAIRES.items() %}
+    {% if modifiable or code == pr.code %}
+    <label class="prf-carte">
+      {% if modifiable %}<input type="radio" class="form-check-input" name="profil" value="{{ code }}" {{ 'checked' if code == pr.code }}>{% endif %}
+      <h3><span class="prf-code">{{ p.drapeau }}</span>{{ p.libelle }}</h3>
+      <dl>
+        <dt>Devise</dt><dd>{{ p.symbole }} · fuseau {{ p.fuseau }}</dd>
+        <dt>Comptabilité</dt><dd>{{ p.comptable }}</dd>
+        <dt>Anti-blanchiment</dt><dd>{{ p.lcb_cellule }} — {{ p.lcb_texte }}</dd>
+        <dt>Régulateur</dt><dd>{{ p.regulateur }}</dd>
+        <dt>Données</dt><dd>{{ p.donnees }}</dd>
+      </dl>
+    </label>
+    {% endif %}
+  {% endfor %}
+  </div>
+{% if modifiable %}
+  <div class="d-flex gap-3 align-items-center flex-wrap mt-3">
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="appliquer_localisation" id="prfLoc" value="1" checked>
+      <label class="form-check-label small" for="prfLoc">Appliquer aussi la devise et le fuseau horaire du profil</label></div>
+    <button class="btn btn-sm btn-primary">Appliquer le profil</button>
+  </div>
+  <p class="pg-second mb-0 mt-2">{% if not profil_choisi(client.id) %}Aucun profil choisi : « {{ pr.libelle }} » est déduit de la devise. {% endif %}Le profil prérègle les tests (jours fériés, comptes sensibles, seuils dans la devise), les références citées dans les constats et par l’IA. L’organisation peut toujours modifier chaque réglage.</p>
+</form>
+{% else %}
+  <p class="pg-second mb-0 mt-2">Choisi par l’éditeur pour votre organisation. Il prérègle les tests d’analyse de données et les références réglementaires ; vous pouvez modifier chaque seuil.</p>
+{% endif %}

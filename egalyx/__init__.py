@@ -95,6 +95,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     ia_audit.enregistrer(app)                       # IA au cœur de l'audit : constats depuis les notes, premier jet du rapport
     from egalyx import analyse_donnees
     analyse_donnees.enregistrer(app)                # analyse des données d'audit (module sur activation du super admin)
+    from egalyx import profil_reglementaire
+    profil_reglementaire.enregistrer(app)           # profil réglementaire par organisation (Côte d'Ivoire / UEMOA, France / UE)
     from egalyx import analyse_sources
     analyse_sources.enregistrer(app)                # sources de données (connecteurs) et analyses programmées (audit continu)
     from egalyx import assistant_donnees
