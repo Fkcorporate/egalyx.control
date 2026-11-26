@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Identité de l'organisation{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .id-apercu { display: flex; align-items: center; gap: .75rem; padding: .75rem 1rem; border-radius: 10px; background: linear-gradient(135deg, #0f2a4d, #1A3C6B); color: #fff; }
+  .id-apercu img { max-height: 36px; max-width: 140px; background: #fff; border-radius: 6px; padding: 3px; }
+  .id-apercu .id-sep { opacity: .4; }
+  .rp-feuille { border: 1px solid #DDE3EA; border-radius: 6px; background: #fff; padding: 14px 18px 10px; font-family: Helvetica, Arial, sans-serif; color: #0f172a; }
+  .rp-haut { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 3px solid var(--rp, #1A3C6B); }
+  .rp-haut img { max-height: 34px; max-width: 120px; }
+  .rp-haut .rp-nom { font-weight: 700; font-size: .95rem; color: var(--rp, #1A3C6B); }
+  .rp-haut .rp-mention { margin-left: auto; font-size: .68rem; font-weight: 700; color: #B42318; border: 1px solid #F3B8B2; border-radius: 4px; padding: 1px 6px; }
+  .rp-titre { font-size: 1rem; font-weight: 700; color: var(--rp, #1A3C6B); margin: 10px 0 6px; }
+  .rp-th { display: grid; grid-template-columns: 2fr 1fr 1fr; font-size: .7rem; }
+  .rp-th span { background: var(--rp, #1A3C6B); color: #fff; padding: 3px 6px; }
+  .rp-td span { background: var(--rp-clair, #EEF2F7); padding: 3px 6px; color: #334155; }
+  .rp-bas { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 6px; border-top: 1px solid #E5E9EF; font-size: .66rem; color: #64748b; white-space: pre-line; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 760px;">
+  {{ pg.entete('Identité de l\'organisation', 'fa-id-badge', 'Le nom et le logo affichés en haut de l\'outil, dans l\'objet des e-mails d\'alerte et sur les rapports') }}
+  {% call pg.carte('Aperçu') %}
+    <div class="id-apercu"><i class="fas fa-shield-alt"></i><strong>Egalyx</strong><span class="id-sep">|</span>
+      {% if ident.logo_url %}<img src="{{ ident.logo_url }}" alt="Logo">{% endif %}<span>{{ ident.nom_court }}</span></div>
+    <div class="pg-second mt-2">Nom officiel : {{ ident.nom }}</div>
+  {% endcall %}
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Nom affiché') %}
+      <input class="form-control" name="nom_court" maxlength="{{ nom_max }}" value="{{ ident.nom_court }}" aria-label="Nom affiché">
+      <div class="pg-second mt-1">{{ nom_max }} caractères au maximum, par exemple un sigle (« SIB » plutôt que « Société Ivoirienne de Banque S.A. »). Laissez vide pour reprendre le nom officiel.</div>
+    {% endcall %}
+    {% call pg.carte('Logo') %}
+      <input class="form-control" type="file" name="logo" accept="image/png,image/jpeg,image/webp" aria-label="Logo">
+      <div class="pg-second mt-1">PNG, JPEG ou WebP, 1 Mo au maximum ; de préférence horizontal sur fond transparent. Il est redimensionné automatiquement.</div>
+      {% if ident.a_logo %}<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="retirer_logo" name="retirer_logo" value="1">
+        <label class="form-check-label small" for="retirer_logo">Retirer le logo actuel</label></div>{% endif %}
+    {% endcall %}
+    <input type="hidden" name="rapports" value="1">
+    {% call pg.carte('Présentation des rapports') %}
+      <p class="pg-second mb-3">S'applique aux rapports PDF, imprimables et Word : rapport d'audit, rapport au comité d'audit, cartographie des risques, KRI, incidents, plans d'action, logigrammes, dispositifs de contrôle, organigramme, feuilles de travail et audits qualité. Sans réglage, les rapports gardent leur présentation habituelle.</p>
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label small fw-semibold" for="rp_couleur">Couleur principale</label>
+          <div class="d-flex align-items-center gap-2">
+            <input class="form-check-input mt-0" type="checkbox" id="rp_couleur_active" name="rp_couleur_active" value="1" {{ 'checked' if rp.couleur }} aria-label="Utiliser une couleur personnalisée">
+            <input class="form-control form-control-color" type="color" id="rp_couleur" name="rp_couleur" value="{{ rp.couleur or '#1A3C6B' }}" {{ 'disabled' if not rp.couleur }}>
+            <span class="small text-muted" id="rp_couleur_txt">{{ rp.couleur or 'couleurs d\'origine' }}</span>
+          </div>
+          <div class="pg-second mt-1">Titres, filets et en-têtes de tableaux. Choisissez une teinte assez foncée pour rester lisible.</div>
+        </div>
+        <div class="col-md-7">
+          <label class="form-label small fw-semibold" for="rp_mention">Mention de confidentialité</label>
+          <input class="form-control" id="rp_mention" name="rp_mention" maxlength="{{ mention_max }}" value="{{ rp.mention }}" list="rp_mentions" placeholder="Aucune mention">
+          <datalist id="rp_mentions">{% for m in mentions %}<option value="{{ m }}">{% endfor %}</datalist>
+          <div class="pg-second mt-1">Affichée en haut de chaque rapport.</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-semibold" for="rp_pied">Pied de page</label>
+          <textarea class="form-control" id="rp_pied" name="rp_pied" rows="2" maxlength="{{ pied_max }}" placeholder="Ex. : Banque Horizon S.A. — Direction de l'audit interne — Abidjan Plateau">{{ rp.pied }}</textarea>
+          <div class="pg-second mt-1">{{ pied_max }} caractères au maximum ; s'ajoute au numéro de page.</div>
+        </div>
+        <div class="col-12">
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="rp_logo" name="rp_logo" value="1" {{ 'checked' if rp.logo }}>
+            <label class="form-check-label small" for="rp_logo">Afficher le logo de l'organisation sur les rapports{% if not ident.a_logo %} (aucun logo enregistré pour l'instant){% endif %}</label></div>
+        </div>
+      </div>
+      <div class="mt-3 small"><a href="{{ url_for('rapport_contenu.page', **({'client_id': request.args.get('client_id')} if request.args.get('client_id') else {})) }}"><i class="fas fa-file-signature me-1"></i>Choisir aussi le contenu : titre, sections, textes types et signataires du rapport d'audit et du rapport au comité</a></div>
+      <div class="small fw-semibold mt-3 mb-2">Aperçu</div>
+      <div class="rp-feuille" id="rp_apercu" style="{% if rp.couleur %}--rp: {{ rp.couleur }};{% endif %}">
+        <div class="rp-haut">
+          {% if ident.logo_url %}<img id="rp_apercu_logo" src="{{ ident.logo_url }}" alt="Logo" {{ 'hidden' if not rp.logo }}>{% endif %}
+          <span class="rp-nom">{{ ident.nom }}</span>
+          <span class="rp-mention" id="rp_apercu_mention" {{ 'hidden' if not rp.mention }}>{{ rp.mention }}</span>
+        </div>
+        <div class="rp-titre">Rapport d'audit — Processus crédit</div>
+        <div class="rp-th"><span>Constatation</span><span>Criticité</span><span>Échéance</span></div>
+        <div class="rp-th rp-td"><span>Délégations de pouvoir non mises à jour</span><span>Élevée</span><span>31/12</span></div>
+        <div class="rp-bas"><span id="rp_apercu_pied">{{ rp.pied }}</span><span>Page 1 / 12</span></div>
+      </div>
+    {% endcall %}
+    <button class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i>Enregistrer</button>
+  </form>
+
+  {% if url_exists('cartouche_qualite.regler') %}
+  {% set cq = cartouche_qualite(ident.id if ident else None) %}
+  {% set _cid = {'client_id': request.args.get('client_id')} if request.args.get('client_id') else {} %}
+  <style>
+    .cq-grille td { vertical-align: middle; }
+    .cq-champs button { font-size: .72rem; padding: .05rem .4rem; }
+    .cq-apercu { background: #fff; padding: 14px; border: 1px dashed #c9d2dc; border-radius: 6px; overflow-x: auto; }
+    .cq-apercu table { min-width: 640px; }
+  </style>
+  <form method="post" action="{{ url_for('cartouche_qualite.regler', **_cid) }}" id="cartouche-qualite" class="mt-3" style="max-width: 1000px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if request.args.get('client_id') %}<input type="hidden" name="client_id" value="{{ request.args.get('client_id') }}">{% endif %}
+    {% call pg.carte('Cartouche qualité du rapport d\'audit') %}
+      <p class="pg-second small mb-3">Exigence de maîtrise documentaire (ISO 9001…) : reproduisez le cartouche de votre système qualité.
+        Il figure en haut de <b>chaque page</b> du rapport d'audit : PDF élégant, export PDF, rapport complet PDF et rapports Word.
+        La case PAGE se numérote toute seule. Le rapport garde sa pleine largeur, sans réduction.
+        Quand il est activé, il remplace le papier à en-tête PDF du rapport d'audit et la numérotation habituelle des pages.</p>
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" role="switch" id="cq_actif" name="actif" value="1" {% if cq.actif %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="cq_actif">Afficher le cartouche qualité sur le rapport d'audit</label>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-7">
+          <label class="form-label small fw-semibold" for="cq_titre">Titre du document <span class="fw-normal text-secondary">(3 lignes au plus)</span></label>
+          <textarea class="form-control cq-maj" id="cq_titre" name="titre" rows="2" maxlength="150" required>{{ cq.titre }}</textarea>
+        </div>
+        <div class="col-md-5">
+          <div class="form-check mt-4">
+            <input class="form-check-input cq-maj" type="checkbox" id="cq_logo" name="logo" value="1" {% if cq.logo %}checked{% endif %}>
+            <label class="form-check-label" for="cq_logo">Case logo (logo de l'organisation){% if ident and not ident.a_logo %} <span class="text-danger small">— aucun logo enregistré</span>{% endif %}</label>
+          </div>
+          <label class="form-label small mt-2 mb-0" for="cq_largeur_logo">Largeur de la case logo : <span id="cq_largeur_logo_v">{{ cq.largeur_logo|round|int }}</span> %</label>
+          <input type="range" class="form-range cq-maj" id="cq_largeur_logo" name="largeur_logo" min="8" max="25" step="1" value="{{ cq.largeur_logo }}">
+        </div>
+      </div>
+
+      <div class="fw-semibold small mt-3 mb-1">Cases du cartouche <span class="fw-normal text-secondary">(dans l'ordre, de gauche à droite ; laissez vide pour ne pas l'afficher)</span></div>
+      <table class="table table-sm cq-grille mb-1" style="max-width: 760px;">
+        <thead><tr><th style="width: 34%;" class="small">Intitulé</th><th class="small">Valeur</th></tr></thead>
+        <tbody>
+        {% for i in range(1, 6) %}{% set c = cq.colonnes[i - 1] if i <= cq.colonnes|length else none %}
+          <tr><td><input class="form-control form-control-sm cq-maj" name="libelle_{{ i }}" id="cq_lib_{{ i }}" maxlength="24" value="{{ c.libelle if c else '' }}" aria-label="Intitulé de la case {{ i }}" placeholder="{{ ['CODE', 'DATE', 'VERSION', 'RÉF.', 'ÉMETTEUR'][i - 1] }}"></td>
+              <td><input class="form-control form-control-sm cq-maj cq-valeur" name="valeur_{{ i }}" id="cq_val_{{ i }}" maxlength="60" value="{{ c.valeur if c else '' }}" aria-label="Valeur de la case {{ i }}" placeholder="{{ ['ENR 003/ PRG-AUDI', '1/03/2023', '00', '{reference}', ''][i - 1] }}"></td></tr>
+        {% endfor %}
+          <tr class="table-light"><td><input class="form-control form-control-sm cq-maj" name="page_libelle" id="cq_page_libelle" maxlength="24" value="{{ cq.page_libelle }}" aria-label="Intitulé de la case page"></td>
+              <td><select class="form-select form-select-sm cq-maj" name="page_format" id="cq_page_format" aria-label="Numérotation des pages">
+                {% for k, v in cartouche_formats_page.items() %}<option value="{{ k }}" {{ 'selected' if k == cq.page_format }}>{{ v }}</option>{% endfor %}
+              </select></td></tr>
+        </tbody>
+      </table>
+      <div class="cq-champs small text-secondary mb-3">Une valeur peut reprendre l'audit, cliquez pour insérer :
+        {% for k, lib in cartouche_champs.items() %}<button type="button" class="btn btn-outline-secondary ms-1" data-champ="{{ '{' ~ k ~ '}' }}" title="{{ lib }}">{{ '{' ~ k ~ '}' }}</button>{% endfor %}
+      </div>
+
+      <details class="mb-3">
+        <summary class="small fw-semibold">Mise en forme</summary>
+        <div class="row g-2 mt-1">
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_police">Police</label>
+            <select class="form-select form-select-sm cq-maj" id="cq_police" name="police"><option value="arial" {{ 'selected' if cq.police == 'arial' }}>Arial</option><option value="times" {{ 'selected' if cq.police == 'times' }}>Times New Roman</option></select></div>
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_taille">Taille du texte (pt)</label>
+            <input class="form-control form-control-sm cq-maj" type="number" id="cq_taille" name="taille" min="7" max="11" step="0.5" value="{{ cq.taille }}"></div>
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_taille_titre">Taille du titre (pt)</label>
+            <input class="form-control form-control-sm cq-maj" type="number" id="cq_taille_titre" name="taille_titre" min="7" max="14" step="0.5" value="{{ cq.taille_titre }}"></div>
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_largeur">Largeur du cartouche</label>
+            <select class="form-select form-select-sm cq-maj" id="cq_largeur" name="largeur"><option value="page" {{ 'selected' if cq.largeur == 'page' }}>Largeur de la page (185 mm)</option><option value="texte" {{ 'selected' if cq.largeur == 'texte' }}>Largeur du texte</option></select></div>
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_trait">Traits</label>
+            <select class="form-select form-select-sm cq-maj" id="cq_trait" name="trait"><option value="fin" {{ 'selected' if cq.trait == 'fin' }}>Fins</option><option value="moyen" {{ 'selected' if cq.trait == 'moyen' }}>Moyens</option><option value="epais" {{ 'selected' if cq.trait == 'epais' }}>Épais</option></select></div>
+          <div class="col-md-3"><label class="form-label small mb-0" for="cq_couleur_trait">Couleur des traits</label>
+            <input class="form-control form-control-sm form-control-color cq-maj" type="color" id="cq_couleur_trait" name="couleur_trait" value="{{ cq.couleur_trait }}"></div>
+          <div class="col-md-6 pt-3">
+            <div class="form-check form-check-inline"><input class="form-check-input cq-maj" type="checkbox" id="cq_titre_gras" name="titre_gras" value="1" {{ 'checked' if cq.titre_gras }}><label class="form-check-label small" for="cq_titre_gras">Titre en gras</label></div>
+            <div class="form-check form-check-inline"><input class="form-check-input cq-maj" type="checkbox" id="cq_libelles_gras" name="libelles_gras" value="1" {{ 'checked' if cq.libelles_gras }}><label class="form-check-label small" for="cq_libelles_gras">Intitulés en gras</label></div>
+            <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" id="cq_premiere_page" name="premiere_page" value="1" {{ 'checked' if cq.premiere_page }}><label class="form-check-label small" for="cq_premiere_page">Aussi sur la page de garde</label></div>
+          </div>
+        </div>
+      </details>
+
+      <div class="small fw-semibold mb-1">Aperçu</div>
+      <div class="cq-apercu" id="cq_apercu">{{ cartouche_html(cq, cid=(ident.id if ident else None), classe='eg-cartouche') }}</div>
+      <div class="mt-3 d-flex gap-2 flex-wrap">
+        <button class="btn btn-primary btn-sm"><i class="fas fa-save me-1"></i>Enregistrer le cartouche</button>
+        <button class="btn btn-outline-secondary btn-sm" formaction="{{ url_for('cartouche_qualite.apercu', **_cid) }}" formmethod="get" formtarget="_blank" name="apercu" value="1">
+          <i class="fas fa-file-pdf me-1"></i>Aperçu PDF (3 pages)</button>
+      </div>
+    {% endcall %}
+  </form>
+  <script>
+  (function () {
+    var f = document.getElementById('cartouche-qualite'); if (!f) { return; }
+    var ap = document.getElementById('cq_apercu');
+    var logo = {{ (cartouche_logo(ident.id) if ident and ident.a_logo else '')|tojson }};
+    var formats = {n_de_N: [' de ', ''], n_sur_N: [' sur ', ''], 'n/N': ['/', ''], page_n_sur_N: [' sur ', 'Page ']};
+    var dernier = null;
+    function esc(t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+    function v(id) { var e = document.getElementById(id); return e ? e.value : ''; }
+    function coche(id) { var e = document.getElementById(id); return e && e.checked; }
+    function largeurTexte(t, taille, gras) {
+      var c = largeurTexte.c || (largeurTexte.c = document.createElement('canvas').getContext('2d'));
+      c.font = (gras ? 'bold ' : '') + taille + 'pt ' + (v('cq_police') === 'times' ? 'Times New Roman' : 'Arial');
+      return Math.max.apply(null, (t || '').split('\n').map(function (l) { return c.measureText(l).width; }).concat([0]));
+    }
+    function dessiner() {
+      var taille = parseFloat(v('cq_taille')) || 8.5, tt = parseFloat(v('cq_taille_titre')) || 9.5;
+      var trait = {fin: 0.5, moyen: 0.9, epais: 1.4}[v('cq_trait')] + 'pt solid ' + v('cq_couleur_trait');
+      var cases = [];
+      for (var i = 1; i <= 5; i++) { var l = v('cq_lib_' + i).trim(), val = v('cq_val_' + i).trim(); if (l || val) { cases.push([l, val]); } }
+      var fmt = v('cq_page_format');
+      if (fmt !== 'aucune') { cases.push([v('cq_page_libelle'), null]); }
+      var avecLogo = coche('cq_logo'), lg = avecLogo ? parseFloat(v('cq_largeur_logo')) : 0;
+      document.getElementById('cq_largeur_logo_v').textContent = Math.round(parseFloat(v('cq_largeur_logo')));
+      var W = 700, besoins = cases.map(function (c) { return Math.max(largeurTexte(c[0], taille, coche('cq_libelles_gras')), largeurTexte(c[1] === null ? '88 de 88' : c[1], taille, true), 18) + 12; });
+      var titre = v('cq_titre').split('\n').slice(0, 3).join('\n');
+      var bt = largeurTexte(titre, tt, coche('cq_titre_gras')) + 18, dispo = W * (100 - lg) / 100;
+      var total = besoins.reduce(function (a, b) { return a + b; }, 0) + bt, ws;
+      if (!cases.length) { bt = dispo; } else if (total <= dispo) { var s = dispo - total; bt += s / 2; besoins = besoins.map(function (b) { return b + s / 2 / besoins.length; }); }
+      else { var k = dispo / total; bt *= k; besoins = besoins.map(function (b) { return b * k; }); }
+      var cell = 'border:' + trait + ';text-align:center;vertical-align:middle;';
+      var h = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:' + (v('cq_police') === 'times' ? 'Times New Roman,serif' : 'Arial,Helvetica,sans-serif') + ';font-size:' + taille + 'pt;color:#000;line-height:1.25"><colgroup>';
+      if (avecLogo) { h += '<col style="width:' + lg + '%">'; }
+      h += '<col style="width:' + (bt / W * 100) + '%">' + besoins.map(function (b) { return '<col style="width:' + (b / W * 100) + '%">'; }).join('') + '</colgroup><tr>';
+      var rows = cases.length ? 2 : 1;
+      if (avecLogo) { h += '<td rowspan="' + rows + '" style="' + cell + 'padding:4px">' + (logo ? '<img src="' + logo + '" alt="" style="max-width:100%;max-height:48px;display:block;margin:0 auto">' : '<span style="color:#999;font-size:8pt">logo</span>') + '</td>'; }
+      h += '<td rowspan="' + rows + '" style="' + cell + 'padding:4px 8px;font-size:' + tt + 'pt;' + (coche('cq_titre_gras') ? 'font-weight:700' : '') + '">' + esc(titre).replace(/\n/g, '<br>') + '</td>';
+      cases.forEach(function (c) { h += '<td style="' + cell + 'padding:3px;' + (coche('cq_libelles_gras') ? 'font-weight:700' : '') + '">' + esc(c[0]) + '</td>'; });
+      h += '</tr>';
+      if (cases.length) {
+        h += '<tr>';
+        cases.forEach(function (c) {
+          h += '<td style="' + cell + 'padding:10px 3px">' + (c[1] === null ? formats[fmt][1] + '<b>1</b>' + formats[fmt][0] + '<b>5</b>' : esc(c[1])) + '</td>';
+        });
+        h += '</tr>';
+      }
+      ap.innerHTML = h + '</table>';
+    }
+    f.querySelectorAll('.cq-maj').forEach(function (e) { e.addEventListener('input', dessiner); e.addEventListener('change', dessiner); });
+    f.querySelectorAll('.cq-valeur, #cq_titre').forEach(function (e) { e.addEventListener('focus', function () { dernier = e; }); });
+    f.querySelectorAll('[data-champ]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = dernier || document.getElementById('cq_val_1'), x = b.getAttribute('data-champ');
+        var a = t.selectionStart != null ? t.selectionStart : t.value.length, z = t.selectionEnd != null ? t.selectionEnd : a;
+        t.value = t.value.slice(0, a) + x + t.value.slice(z); t.focus(); dessiner();
+      });
+    });
+    dessiner();
+  })();
+  </script>
+  {% endif %}
+  {% if url_exists('connexion_client.reglage') %}
+  <p class="pg-second small mt-3"><i class="fas fa-right-to-bracket me-1"></i>Le logo et le nom apparaissent aussi sur la page de connexion de votre organisation :
+    <a href="{{ url_for('connexion_client.reglage') }}">personnaliser la page de connexion</a>.</p>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var ap = document.getElementById('rp_apercu'); if (!ap) { return; }
+  var actif = document.getElementById('rp_couleur_active'), coul = document.getElementById('rp_couleur'),
+      txt = document.getElementById('rp_couleur_txt');
+  function teinte(h, part) {
+    var n = parseInt(h.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255];
+    return 'rgb(' + c.map(function (x) { return Math.round(255 - (255 - x) * part); }).join(',') + ')';
+  }
+  function couleur() {
+    coul.disabled = !actif.checked;
+    if (actif.checked) { ap.style.setProperty('--rp', coul.value); ap.style.setProperty('--rp-clair', teinte(coul.value, .14)); txt.textContent = coul.value.toUpperCase(); }
+    else { ap.style.removeProperty('--rp'); ap.style.removeProperty('--rp-clair'); txt.textContent = "couleurs d'origine"; }
+  }
+  actif.addEventListener('change', couleur); coul.addEventListener('input', couleur);
+  var men = document.getElementById('rp_mention'), amen = document.getElementById('rp_apercu_mention');
+  men.addEventListener('input', function () { amen.textContent = men.value; amen.hidden = !men.value.trim(); });
+  var pied = document.getElementById('rp_pied'), apied = document.getElementById('rp_apercu_pied');
+  pied.addEventListener('input', function () { apied.textContent = pied.value; });
+  var logo = document.getElementById('rp_logo'), alogo = document.getElementById('rp_apercu_logo');
+  if (alogo) { logo.addEventListener('change', function () { alogo.hidden = !logo.checked; }); }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Analyse de données — Audit interne{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {% call pg.entete('Analyse de données', 'fa-magnifying-glass-chart', 'Analyses des missions d’audit : import Excel / CSV ou lecture dans vos systèmes, 63 tests, anomalies converties en feuilles de travail et constats') %}
+    {% if analyse_sources_visible is defined and analyse_sources_visible() %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_sources.sources') }}"><i class="fas fa-database me-1"></i>Sources de données</a>{% endif %}
+    {% if analyse_programmes_visible is defined and analyse_programmes_visible() %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_sources.programmes') }}"><i class="fas fa-clock-rotate-left me-1"></i>Audit continu</a>{% endif %}
+  {% endcall %}
+
+  {% if audits %}
+  {% call pg.carte('Nouvelle analyse') %}
+    <form method="POST" action="{{ url_for('analyse_donnees.nouvelle_depuis_liste') }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-5"><label class="form-label small mb-1" for="adMission">Mission d’audit</label>
+        <select id="adMission" name="audit_id" class="form-select" required>{% for a in audits %}<option value="{{ a.id }}">{{ a.reference }} — {{ a.titre }}</option>{% endfor %}</select></div>
+      <div class="col-md-5"><label class="form-label small mb-1" for="adTitre">Intitulé</label>
+        <input id="adTitre" type="text" name="titre" class="form-control" maxlength="200" placeholder="Analyse des données de la mission"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100"><i class="fas fa-plus me-1"></i>Créer</button></div>
+    </form>
+    <p class="pg-second mb-0 mt-2">L’analyse est rattachée à la mission : équipe, feuilles de travail, constats et rapport.</p>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('Analyses') %}
+    {% if analyses %}
+    <div class="table-responsive">
+    <table class="pg-table">
+      <thead><tr><th>Référence</th><th>Intitulé</th><th>Mission</th><th>Dernière exécution</th><th class="pg-num">Tests avec anomalies</th></tr></thead>
+      <tbody>{% for x in analyses %}{% set a = audit(x.audit_id) %}
+        <tr>
+          <td class="pg-ref"><a href="{{ url_for('analyse_donnees.page', analyse_id=x.id) }}">{{ x.reference }}</a></td>
+          <td>{{ x.titre }}</td>
+          <td>{% if a %}<a href="{{ url_for('detail_audit', id=a.id) }}">{{ a.reference }}</a><div class="pg-second">{{ a.titre }}</div>{% endif %}</td>
+          <td>{% if x.execution %}{{ x.execution.le[8:10] }}/{{ x.execution.le[5:7] }}/{{ x.execution.le[:4] }}<div class="pg-second">{{ nom(x.execution.par) }}</div>{% else %}<span class="pg-second">Pas encore lancée</span>{% endif %}</td>
+          <td class="pg-num">{{ x.resultats.values()|selectattr('statut', 'equalto', 'anomalies')|list|length if x.resultats else '—' }}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    {% else %}{{ pg.vide('Aucune analyse. Créez-en une ci-dessus, ou depuis la fiche d’une mission (bouton « Analyse de données »).', 'fa-magnifying-glass-chart') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

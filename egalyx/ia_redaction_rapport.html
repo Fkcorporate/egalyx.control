@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Rédaction du rapport — {{ audit.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .rr-etat { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 600; padding: .2rem .6rem; border-radius: 999px; }
+  .rr-etat.valide { background: var(--bs-success-bg-subtle); color: var(--bs-success-text-emphasis); }
+  .rr-etat.brouillon { background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  .rr-etat.vide { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .rr-zone textarea { font-size: .92rem; line-height: 1.55; }
+  .rr-origine { display: none; border-radius: 8px; padding: .55rem .75rem; font-size: .84rem; margin-bottom: .9rem; }
+  .rr-origine.ia { display: block; background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+  .rr-origine.automatique { display: block; background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  .rr-attente { display: none; }
+  .rr-charge .rr-attente { display: inline-block; }
+  .rr-charge .rr-libelle { display: none; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete('Rédaction du rapport', 'fa-pen-nib', audit.reference ~ ' · ' ~ audit.titre, retour=url_for('detail_audit', id=audit.id), libelle_retour="Fiche de l'audit") %}{% endcall %}
+
+  <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+    {% if r.etat == 'valide' %}
+      <span class="rr-etat valide"><i class="fas fa-circle-check"></i>Validé — figure dans les rapports PDF et Word</span>
+      <span class="pg-second">par {{ nom_valide or '—' }}{% if r.valide_le %}, le {{ r.valide_le[:10]|replace('-', '/') }}{% endif %}{% if r.ia %} · premier jet proposé par l’IA puis relu{% endif %}</span>
+    {% elif r.etat == 'brouillon' %}
+      <span class="rr-etat brouillon"><i class="fas fa-pen"></i>Brouillon — ne figure pas encore dans le rapport</span>
+      {% if nom_par %}<span class="pg-second">enregistré par {{ nom_par }}</span>{% endif %}
+    {% else %}
+      <span class="rr-etat vide"><i class="far fa-file"></i>Pas encore rédigé — le rapport garde son résumé chiffré habituel</span>
+    {% endif %}
+  </div>
+
+  {% if fige %}
+  <div class="alert alert-secondary small"><i class="fas fa-lock me-2"></i>Le rapport définitif est émis : le dossier est figé, la rédaction ne peut plus être modifiée.</div>
+  {% endif %}
+
+  <div class="rr-origine" id="rrOrigine" role="status"></div>
+
+  <form method="post" class="rr-zone" id="rrForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="ia" id="rrIa" value="{{ '1' if r.ia else '0' }}">
+    <input type="hidden" name="origine" id="rrOrigineChamp" value="{{ r.origine }}">
+    {% call pg.carte('Résumé exécutif', aide='En tête de la section « Résumé exécutif », avant les chiffres') %}
+      <label class="visually-hidden" for="rrResume">Résumé exécutif</label>
+      <textarea class="form-control" name="resume" id="rrResume" rows="12" maxlength="8000" {% if fige %}readonly{% endif %}
+                placeholder="Objectif et périmètre de la mission, appréciation d’ensemble, principaux constats, priorités d’action…">{{ r.resume }}</textarea>
+    {% endcall %}
+    {% call pg.carte('Conclusion de la mission', aide='Section « Conclusion », avant le texte type de votre organisation') %}
+      <label class="visually-hidden" for="rrConclusion">Conclusion</label>
+      <textarea class="form-control" name="conclusion" id="rrConclusion" rows="7" maxlength="8000" {% if fige %}readonly{% endif %}
+                placeholder="Opinion globale motivée (satisfaisant, à améliorer, insatisfaisant), engagements des audités…">{{ r.conclusion }}</textarea>
+    {% endcall %}
+
+    {% if not fige %}
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      {% if ia_ok %}
+      <button type="button" class="btn btn-outline-primary" id="rrProposer">
+        <span class="rr-libelle"><i class="fas fa-wand-magic-sparkles me-1"></i>Proposer un premier jet</span>
+        <span class="rr-attente"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Rédaction en cours…</span>
+      </button>
+      {% endif %}
+      <button class="btn btn-outline-secondary" name="action" value="brouillon">Enregistrer le brouillon</button>
+      <button class="btn btn-primary" name="action" value="valider"
+              onclick="return confirm('Valider ce texte ? Il figurera dans les rapports PDF et Word de la mission.')"><i class="fas fa-check me-1"></i>Valider pour le rapport</button>
+      {% if r.etat == 'valide' %}
+      <button class="btn btn-link text-danger ms-auto" name="action" value="retirer" formnovalidate>Retirer la validation</button>
+      {% endif %}
+    </div>
+    <p class="pg-second mt-2 mb-0">{% if ia_ok %}Le premier jet s’appuie sur les constats, recommandations, tests et plans d’action de la mission ; il remplace le texte des deux zones. Relisez-le : seul le texte validé figure dans le rapport.
+      {% else %}Rédigez le résumé et la conclusion ; ils figureront dans le rapport une fois validés.{% endif %}</p>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if ia_ok and not fige %}
+<script>
+(function () {
+  var b = document.getElementById('rrProposer'), zone = document.getElementById('rrOrigine');
+  var resume = document.getElementById('rrResume'), conclusion = document.getElementById('rrConclusion');
+  b.addEventListener('click', function () {
+    if ((resume.value.trim() || conclusion.value.trim()) && !confirm('Remplacer le texte actuel par un premier jet ?')) return;
+    b.disabled = true; b.classList.add('rr-charge'); zone.className = 'rr-origine';
+    fetch({{ url_for('ia_audit.redaction_proposer', audit_id=audit.id)|tojson }}, {
+      method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.success) { zone.className = 'rr-origine automatique'; zone.textContent = j.error || 'La proposition n’a pas pu être faite.'; return; }
+        resume.value = j.resume; conclusion.value = j.conclusion;
+        document.getElementById('rrIa').value = j.origine === 'ia' ? '1' : '0';
+        document.getElementById('rrOrigineChamp').value = j.origine;
+        zone.className = 'rr-origine ' + j.origine;
+        zone.textContent = j.origine_libelle + ' Puis enregistrez ou validez.';
+      })
+      .catch(function () { zone.className = 'rr-origine automatique'; zone.textContent = 'La proposition n’a pas pu être faite (connexion).'; })
+      .finally(function () { b.disabled = false; b.classList.remove('rr-charge'); });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

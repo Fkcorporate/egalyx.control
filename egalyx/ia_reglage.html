@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Intelligence artificielle{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 900px;">
+  {{ pg.entete('Intelligence artificielle', 'fa-robot', 'Interrupteur général, fonctions une à une, fournisseur et confidentialité des données') }}
+  {% call pg.carte() %}
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <span class="fs-5">L’IA est <strong class="{{ 'text-success' if active else 'text-danger' }}">{{ 'activée' if active else 'désactivée' }}</strong> sur la plateforme.</span>
+      {% if not force_env %}
+      <form method="post" class="ms-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="ia_active" value="{{ '0' if active else '1' }}">
+        <button class="btn {{ 'btn-outline-danger' if active else 'btn-success' }}"
+                onclick="return confirm({{ ('Désactiver toute l’IA pour tous les clients ?' if active else 'Réactiver l’IA ?')|tojson|forceescape }})">
+          <i class="fas fa-power-off me-1"></i>{{ 'Désactiver toute l’IA' if active else 'Réactiver l’IA' }}</button>
+      </form>
+      {% else %}
+      <span class="badge text-bg-warning ms-auto">Forcé par la variable EGALYX_IA=0</span>
+      {% endif %}
+    </div>
+    <hr>
+    <p class="small mb-2">Quand l’IA est désactivée, pour tous les clients et immédiatement :</p>
+    <ul class="small mb-0">
+      <li>les {{ nb_adresses }} pages et fonctions dédiées à l’IA sont bloquées (analyse IA Ultra des cartographies, analyses d’audit, suggestions de KRI, de plans qualité, de PCA, détection de menaces de la veille, génération de constats et de plans d’action…) ;</li>
+      <li>les analyses automatiques intégrées à d’autres actions (création et résolution d’incident, synchronisation de la veille) ne sont plus appelées : ces actions continuent normalement, sans IA ;</li>
+      <li>les boutons et liens d’IA disparaissent des pages ;</li>
+      <li>l’assistant de discussion reste disponible : il répond à partir du centre d’aide et des données, sans IA.</li>
+    </ul>
+  {% endcall %}
+  {% call pg.carte('Fonctions d’IA', aide='Chacune s’ajoute à l’interrupteur général ci-dessus') %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="fonctions">
+      {% for code, nom, desc in fonctions %}
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" role="switch" name="f_{{ code }}" value="1" id="f_{{ code }}" {% if fonctions_actives[code] %}checked{% endif %}>
+        <label class="form-check-label" for="f_{{ code }}"><strong>{{ nom }}</strong><br><span class="small text-secondary">{{ desc }}</span></label>
+      </div>
+      {% endfor %}
+      <button class="btn btn-sm btn-primary mt-1">Enregistrer les fonctions</button>
+    </form>
+  {% endcall %}
+
+  {% call pg.carte('Fournisseur d’IA', aide='Pour toutes les fonctions d’IA de l’outil, anciennes et nouvelles') %}
+    <form method="post" class="mb-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="fournisseur">
+      {% for code, f in fournisseurs.items() %}
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="radio" name="fournisseur" value="{{ code }}" id="fo_{{ code }}" {% if passerelle.choisi == code %}checked{% endif %}>
+        <label class="form-check-label" for="fo_{{ code }}"><strong>{{ f.libelle }}</strong> <span class="text-secondary">· {{ f.pays }}</span>
+          {% if passerelle.cles[code] %}<span class="badge text-bg-success ms-1">clé {{ f.cle }} présente</span>
+          {% else %}<span class="badge text-bg-light border ms-1">variable {{ f.cle }} à définir sur Render</span>{% endif %}
+          {% if code == 'deepseek' %}<br><span class="small text-danger-emphasis"><i class="fas fa-triangle-exclamation me-1"></i>Selon sa politique de confidentialité, DeepSeek stocke les données en Chine. Jamais utilisé en secours : seulement si vous le choisissez. Vérifiez que vos clients l’acceptent.</span>{% endif %}
+          {% if code == 'anthropic' %}<br><span class="small text-secondary">API native de Claude ; modèle réglable par EGALYX_IA_MODELE_ANTHROPIC.</span>{% endif %}</label>
+      </div>
+      {% endfor %}
+      <button class="btn btn-sm btn-primary" onclick="var c=this.form.querySelector('input[name=fournisseur]:checked'); return !(c && c.value==='deepseek') || confirm('DeepSeek stocke les données en Chine. Utiliser DeepSeek pour toutes les fonctions d’IA de tous les clients ?');">Utiliser ce fournisseur</button>
+    </form>
+    <p class="small mb-0">
+      {% if passerelle.effectif %}En service : <strong>{{ fournisseurs[passerelle.effectif].libelle }}</strong>, modèle <code>{{ passerelle.modele }}</code>.
+        {% if passerelle.effectif != passerelle.choisi %}<span class="text-warning-emphasis">(le fournisseur choisi n’a pas de clé : l’autre est utilisé)</span>{% endif %}
+      {% else %}<span class="text-danger">Aucune clé d’IA : les fonctions d’IA répondent en mode automatique (règles prédéfinies).</span>{% endif %}
+    </p>
+  {% endcall %}
+
+  {% call pg.carte('Confidentialité des données envoyées') %}
+    <form method="post" class="d-flex align-items-start gap-3 flex-wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="masquage">
+      <input type="hidden" name="ia_masquage" value="{{ '0' if passerelle.masquage else '1' }}">
+      <div class="small flex-grow-1" style="min-width: 260px;">
+        Masquage <strong class="{{ 'text-success' if passerelle.masquage else 'text-danger' }}">{{ 'activé' if passerelle.masquage else 'coupé' }}</strong>.
+        Avant chaque envoi, les noms des utilisateurs, les personnes citées avec une civilité (M., Mme…), le nom de l’organisation,
+        les e-mails, téléphones, IBAN et numéros de compte sont remplacés par des repères ([PERSONNE_1]…) ;
+        la réponse est remise en clair dans l’outil. Montants, dates et intitulés restent visibles pour l’analyse.
+      </div>
+      <button class="btn btn-sm {{ 'btn-outline-danger' if passerelle.masquage else 'btn-success' }}"
+              {% if passerelle.masquage %}onclick="return confirm('Couper le masquage ? Les données partiront telles quelles chez le fournisseur.')"{% endif %}>
+        {{ 'Couper le masquage' if passerelle.masquage else 'Activer le masquage' }}</button>
+    </form>
+  {% endcall %}
+
+  {% call pg.carte('Derniers appels à l’IA', aide='Journal de chaque organisation · jamais le contenu') %}
+    {% if derniers_appels %}
+    <table class="pg-table">
+      <thead><tr><th>Date</th><th>Organisation</th><th>Fonction</th><th>Fournisseur</th><th class="pg-num">Données masquées</th></tr></thead>
+      <tbody>{% for a in derniers_appels %}<tr><td class="pg-second">{{ pg.date(a.date, avec_heure=True) }}</td><td>{{ a.organisation }}</td>
+        <td class="pg-second">{{ a.fonction }}</td><td>{{ a.fournisseur }} <span class="pg-second">{{ a.modele }}</span></td><td class="pg-num">{{ a.donnees_masquees }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}{{ pg.vide('Aucun appel à l’IA pour l’instant.', 'fa-robot') }}{% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Réglage par client', aide='Page « Modules » de chaque client') %}
+    <p class="small">Même IA activée, un client ne l’a que si le module <strong>Analyse IA</strong> est coché pour lui, et chaque utilisateur
+      seulement s’il a la permission <strong>Utiliser l’analyse IA</strong>.</p>
+    {% if sans_ia %}<p class="small mb-1">Clients pour lesquels l’IA est désactivée :</p>
+      <ul class="small mb-0">{% for c in sans_ia %}<li><a href="{{ url_for('modules_client.page', client_id=c.id) }}">{{ c.nom }}</a></li>{% endfor %}</ul>
+    {% else %}<p class="small text-secondary mb-0">Aucun client n’a le module IA désactivé.</p>{% endif %}
+  {% endcall %}
+  <p class="pg-second">Les fonctions d’IA envoient au fournisseur choisi des données des clients (risques, incidents, constats), masquées si le masquage est activé.
+    Mentionnez-le dans vos contrats, avec le fournisseur et le pays de traitement.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Charte d'audit interne{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ch-texte { white-space: pre-wrap; font-size: .92rem; line-height: 1.6; max-width: 80ch; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1000px;">
+  {{ pg.entete("Charte d'audit interne", 'fa-scroll', "Mandat, positionnement et responsabilités de l'audit interne, approuvés par le Conseil (Normes IIA, principe 6).") }}
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_univers') }}"><i class="fas fa-sitemap me-1"></i>Univers d'audit</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('fonction_audit.page_qualite') }}"><i class="fas fa-award me-1"></i>Qualité de la fonction</a>
+  </div>
+
+  {% call pg.carte('Charte en vigueur') %}
+    {% if vigueur %}
+      <p class="small mb-2">Version {{ vigueur.version }}, approuvée le <strong>{{ vigueur.approuvee_le.strftime('%d/%m/%Y') }}</strong> par <strong>{{ vigueur.approuvee_par }}</strong>.
+        Prochaine revue : <strong class="{{ 'text-danger' if vigueur.revue_prevue and vigueur.revue_prevue < aujourdhui }}">{{ vigueur.revue_prevue.strftime('%d/%m/%Y') if vigueur.revue_prevue else '—' }}</strong>
+        {% if vigueur.revue_prevue and vigueur.revue_prevue < aujourdhui %}(dépassée){% endif %}</p>
+      <div class="ch-texte border rounded p-3">{{ vigueur.texte }}</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2" type="button" onclick="window.print()"><i class="fas fa-print me-1"></i>Imprimer</button>
+    {% else %}
+      <p class="text-secondary mb-0">Aucune charte approuvée. Préparez-en une à partir du modèle ci-dessous, puis enregistrez son approbation par le Conseil.</p>
+    {% endif %}
+  {% endcall %}
+
+  <div id="brouillon">
+  {% if brouillon %}
+  {% call pg.carte('Version ' ~ brouillon.version ~ ' en préparation') %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <textarea class="form-control mb-2" name="texte" rows="22" maxlength="30000" aria-label="Texte de la charte" style="font-size: .9rem;">{{ brouillon.texte or '' }}</textarea>
+      <div class="d-flex gap-2 mb-3">
+        <button class="btn btn-sm btn-outline-primary" name="action" value="enregistrer"><i class="fas fa-save me-1"></i>Enregistrer le brouillon</button>
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="abandonner" formnovalidate onclick="return confirm('Abandonner ce brouillon ?')">Abandonner</button>
+      </div>
+      <div class="border-top pt-3">
+        <div class="fw-semibold small mb-2">Approbation par le Conseil</div>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4"><label class="form-label small mb-0" for="approuvee_le">Approuvée le</label>
+            <input class="form-control form-control-sm" type="date" id="approuvee_le" name="approuvee_le" max="{{ aujourdhui.isoformat() }}"></div>
+          <div class="col-md-5"><label class="form-label small mb-0" for="approuvee_par">Par</label>
+            <input class="form-control form-control-sm" id="approuvee_par" name="approuvee_par" list="instances" maxlength="200" placeholder="Ex. : Conseil d'administration">
+            <datalist id="instances">{% for i in instances %}<option value="{{ i }}">{% endfor %}</datalist></div>
+          <div class="col-md-3"><button class="btn btn-sm btn-success w-100" name="action" value="approuver"><i class="fas fa-stamp me-1"></i>Mettre en vigueur</button></div>
+        </div>
+        <p class="pg-second mt-2 mb-0">La version en vigueur est alors remplacée et conservée dans l'historique ; une revue est prévue un an après l'approbation.</p>
+      </div>
+    </form>
+  {% endcall %}
+  {% else %}
+  <form method="post" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-primary" name="action" value="nouvelle"><i class="fas fa-pen me-1"></i>{{ 'Préparer une nouvelle version' if vigueur else 'Rédiger la charte à partir du modèle' }}</button>
+  </form>
+  {% endif %}
+  </div>
+
+  {% if versions|length > 1 or (versions and not vigueur) %}
+  {% call pg.carte('Historique') %}
+    <table class="table table-sm mb-0"><tbody>
+    {% for v in versions %}
+      <tr><td>Version {{ v.version }}</td><td class="small">{{ {'approuvee': 'En vigueur', 'remplacee': 'Remplacée', 'brouillon': 'En préparation'}[v.statut] }}</td>
+        <td class="small">{% if v.approuvee_le %}approuvée le {{ v.approuvee_le.strftime('%d/%m/%Y') }} par {{ v.approuvee_par }}{% endif %}</td>
+        <td class="text-end">{% if v.statut == 'remplacee' %}<details><summary class="small">Lire</summary><div class="ch-texte small mt-2">{{ v.texte }}</div></details>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}
