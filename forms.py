@@ -225,19 +225,7 @@ class PoleForm(FlaskForm):
         if not super(PoleForm, self).validate(extra_validators):
             return False
 
-        # Validation du responsable selon le type
-        if self.type_responsable.data == 'utilisateur' and self.responsable_id.data in (0, None):
-            self.responsable_id.errors.append(
-                'Veuillez sélectionner un responsable'
-            )
-            return False
-
-        if self.type_responsable.data == 'manuel' and not self.responsable_nom_manuel.data:
-            self.responsable_nom_manuel.errors.append(
-                'Veuillez saisir le nom du responsable'
-            )
-            return False
-
+        # Responsable facultatif : sans responsable, l'entité apparaît « À pourvoir » dans la structure
         return True
 
 class PaysForm(FlaskForm):
@@ -281,16 +269,7 @@ class DirectionForm(FlaskForm):
         if not super(DirectionForm, self).validate(extra_validators):
             return False
         
-        # Validation du responsable selon le type
-        if self.type_responsable.data == 'utilisateur':
-            if self.responsable_id.data in (0, None):
-                self.responsable_id.errors.append('Veuillez sélectionner un responsable')
-                return False
-        elif self.type_responsable.data == 'manuel':
-            if not self.responsable_nom_manuel.data or not self.responsable_nom_manuel.data.strip():
-                self.responsable_nom_manuel.errors.append('Veuillez saisir le nom du responsable')
-                return False
-        
+        # Responsable facultatif : sans responsable, l'entité apparaît « À pourvoir » dans la structure
         return True
 
 class ServiceForm(FlaskForm):
@@ -323,16 +302,7 @@ class ServiceForm(FlaskForm):
         if not super(ServiceForm, self).validate(extra_validators):
             return False
         
-        # Validation du responsable selon le type
-        if self.type_responsable.data == 'utilisateur':
-            if self.responsable_id.data in (0, None):
-                self.responsable_id.errors.append('Veuillez sélectionner un responsable')
-                return False
-        elif self.type_responsable.data == 'manuel':
-            if not self.responsable_nom_manuel.data or not self.responsable_nom_manuel.data.strip():
-                self.responsable_nom_manuel.errors.append('Veuillez saisir le nom du responsable')
-                return False
-        
+        # Responsable facultatif : sans responsable, l'entité apparaît « À pourvoir » dans la structure
         return True
 
 class CartographieForm(FlaskForm):

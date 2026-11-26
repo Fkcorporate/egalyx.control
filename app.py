@@ -27597,7 +27597,7 @@ def nouveau_pole():
             )
             
             # Gestion du responsable
-            if form.type_responsable.data == 'utilisateur' and form.responsable_id.data > 0:
+            if form.type_responsable.data == 'utilisateur' and (form.responsable_id.data or 0) > 0:
                 pole.responsable_id = form.responsable_id.data
                 pole.responsable_nom_manuel = None
                 pole.responsable_type = 'utilisateur'
@@ -27671,7 +27671,7 @@ def editer_pole(id):
             pole.updated_at = datetime.utcnow()
             
             # Gestion du responsable
-            if form.type_responsable.data == 'utilisateur' and form.responsable_id.data > 0:
+            if form.type_responsable.data == 'utilisateur' and (form.responsable_id.data or 0) > 0:
                 pole.responsable_id = form.responsable_id.data
                 pole.responsable_nom_manuel = None
                 pole.responsable_type = 'utilisateur'

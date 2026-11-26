@@ -40,6 +40,7 @@ ETAPES = [
     ('Notifications sur les appareils (push, pastille)', 'notifications_push.py', []),
     ('Centre d’aide : guide illustré pas à pas', 'guide_illustre.py', []),
     ('Structure de l’organisation, collaborateurs, organigramme', 'structure_orga.py', []),
+    ('Structure : « Ajouter » pays, pôle, direction, service sans responsable (à pourvoir)', 'structure_ajouter.py', []),
     ('Sécurité : routes de réparation introuvables', 'routes_reparation.py', []),
     ('Espace opérateur : droits et périmètre sur chaque page', 'operateurs.py', []),
     ('Fenêtres Directions / Pôles, compteur des feuilles de travail', 'correctifs_ui.py', []),
