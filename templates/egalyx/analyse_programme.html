@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ p.nom }} — analyse programmée{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ap-niveau { font-size: .7rem; border-radius: 999px; padding: .08rem .5rem; font-weight: 600; white-space: nowrap; }
+  .ap-niveau.eleve { background: #fde8ea; color: #a51d2d; } .ap-niveau.moyen { background: #fff1d6; color: #8a5300; } .ap-niveau.faible { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .ap-hist tr.actif td { background: var(--bs-primary-bg-subtle); }
+  .ap-ano { font-size: .8rem; margin: .4rem 0 0; }
+  .ap-ano td { padding: .3rem .45rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1150px;">
+  {% call pg.entete(p.nom, 'fa-clock-rotate-left', 'Analyse programmée · ' ~ FREQ.get(p.frequence, '') ~ ' · ' ~ PERIODES.get(p.periode, ''), retour=url_for('analyse_sources.programmes'), libelle_retour='Analyses programmées') %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_sources.programme_form', pid=p.id) }}"><i class="fas fa-pen me-1"></i>Modifier</a>
+    <form method="POST" action="{{ url_for('analyse_sources.programme_executer', pid=p.id) }}" class="d-inline" id="apExec">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-primary"><span class="ap-l"><i class="fas fa-play me-1"></i>Exécuter maintenant</span><span class="ap-a d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exécution…</span></button>
+    </form>
+  {% endcall %}
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+    {% call pg.carte('Paramétrage') %}
+      <dl class="pg-dl small">
+        <dt>Source</dt><dd>{{ src.nom if src else '—' }}{% if src and not src.actif %} (désactivée){% endif %}</dd>
+        <dt>Données</dt><dd>{% for j in p.jeux or [] %}{{ JEUX[j].libelle }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+        <dt>Tests</dt><dd>{{ (p.tests or [])|length }} : {% for c in (p.tests or [])[:6] %}{{ TESTS[c].titre }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if (p.tests or [])|length > 6 }}</dd>
+        <dt>État</dt><dd>{% if p.actif %}Active — prochaine exécution le {{ pg.date(p.prochaine_execution, True) }} (UTC){% else %}Suspendue{% endif %}</dd>
+        <dt>Responsable</dt><dd>{{ nom(p.responsable_id) or '—' }}</dd>
+      </dl>
+    {% endcall %}
+    </div>
+    <div class="col-lg-5">
+    {% call pg.carte('Suites données') %}
+      <dl class="pg-dl small">
+        <dt>Contrôle N2</dt><dd>{% if referentiel %}{{ referentiel.code_controle }} — {{ referentiel.nom }}{% if pl %}<br>Planification en cours : <strong>{{ pl.reference }}</strong> ({{ pl.statut|replace('_', ' ') }}){% endif %}{% else %}—{% endif %}</dd>
+        <dt>KRI</dt><dd>{% for l in p.kri_liens or [] %}{% set k = kri(l.kri_id) %}{{ k.nom if k else '?' }} ← {{ TESTS[l.test].titre }} ({{ MESURES[l.mesure]|lower }}){% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
+      </dl>
+    {% endcall %}
+    </div>
+  </div>
+
+  {% call pg.carte('Historique des exécutions') %}
+    {% if execs %}
+    <table class="pg-table ap-hist">
+      <thead><tr><th>Date (UTC)</th><th>Période</th><th>Déclenchement</th><th>Résultat</th><th class="pg-num">Nouvelles</th></tr></thead>
+      <tbody>{% for e in execs %}
+        <tr class="{{ 'actif' if ex and e.id == ex.id }}">
+          <td><a href="{{ url_for('analyse_sources.programme', pid=p.id, execution=e.id) }}">{{ pg.date(e.debut, True) }}</a></td>
+          <td>{{ pg.date(e.periode_debut) }} – {{ pg.date(e.periode_fin) }}</td>
+          <td>{{ 'Manuel' ~ (' (' ~ nom(e.par_id) ~ ')' if e.par_id else '') if e.declenchement == 'manuel' else 'Automatique' }}</td>
+          <td>{% if e.statut == 'ok' %}<i class="fas fa-check text-success me-1"></i>{% else %}<i class="fas fa-triangle-exclamation text-danger me-1"></i>{% endif %}<span class="small">{{ e.message }}</span></td>
+          <td class="pg-num">{{ e.nouvelles or 0 }}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% else %}{{ pg.vide('Pas encore exécutée. « Exécuter maintenant » pour un premier essai.', 'fa-hourglass-start') }}{% endif %}
+  {% endcall %}
+
+  {% if ex and ex.statut == 'ok' %}
+  {% call pg.carte('Résultats de l’exécution du ' ~ pg.date(ex.debut, True), aide='Empreintes des données lues conservées') %}
+    <p class="small pg-second">{% for j in ex.jeux or [] %}{{ j.libelle }} : {{ j.lignes }} ligne(s){% if j.empreinte %} (SHA-256 {{ j.empreinte[:12] }}…){% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>
+    <table class="pg-table">
+      <thead><tr><th>Test</th><th>Risque</th><th class="pg-num">Population</th><th class="pg-num">Cas</th><th class="pg-num">Montant</th><th>Résultat</th></tr></thead>
+      <tbody>{% for r in resultats %}
+        <tr><td>{{ r.titre }}{% if r.raison %}<div class="pg-second">{{ r.raison }}</div>{% endif %}
+          {% if r.statut == 'anomalies' %}<details><summary class="small">Voir les {{ r.anomalies|length }} premières anomalies</summary>
+            <table class="ap-ano"><tbody>{% for a in r.anomalies[:30] %}<tr><td class="pg-ref">{{ a.ref or '—' }}</td><td>{{ a.tiers }}</td><td>{{ a.date }}</td><td class="pg-num">{{ fr(a.montant) if a.montant is not none else '' }}</td><td>{{ a.motif }}</td></tr>{% endfor %}</tbody></table></details>{% endif %}</td>
+          <td><span class="ap-niveau {{ r.niveau }}">{{ NIVEAUX[r.niveau][0] }}</span></td>
+          <td class="pg-num">{{ r.population if r.statut in ('ok', 'anomalies') else '—' }}</td>
+          <td class="pg-num">{{ r.cas if r.statut == 'anomalies' else '—' }}</td>
+          <td class="pg-num">{{ fr(r.montant) if r.montant and r.statut == 'anomalies' else '—' }}</td>
+          <td class="small">{% if r.statut == 'anomalies' %}<span class="text-danger-emphasis">À examiner</span>{% elif r.statut == 'ok' %}<span class="text-success-emphasis">Aucune anomalie</span>{% else %}<span class="pg-second">Non applicable</span>{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% if ex.suites and ex.suites.n2 %}<p class="small mt-2 mb-0"><i class="fas fa-user-check me-1"></i>{{ ex.suites.n2.elements }} élément(s) ajouté(s) à la planification N2 <strong>{{ ex.suites.n2.reference }}</strong>.</p>{% endif %}
+  {% endcall %}
+  {% endif %}
+  <form method="POST" action="{{ url_for('analyse_sources.programme_supprimer', pid=p.id) }}" class="text-end mb-4" onsubmit="return confirm('Supprimer cette analyse programmée et son historique ?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger"><i class="fas fa-trash-can me-1"></i>Supprimer</button>
+  </form>
+</div>
+<script>
+document.getElementById('apExec').addEventListener('submit', function () { var b = this.querySelector('button'); b.disabled = true; b.querySelector('.ap-l').classList.add('d-none'); b.querySelector('.ap-a').classList.remove('d-none'); });
+</script>
+{% endblock %}

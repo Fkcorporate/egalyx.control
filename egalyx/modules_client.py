@@ -42,6 +42,8 @@ CATALOGUE = [
      'Contrôle interne', ('can_view_quality', 'can_manage_quality', 'can_manage_quality_plans', 'can_manage_quality_audits'), ('qualite',)),
     ('audit', 'Audit interne', 'Missions, feuilles de travail, constatations, recommandations, rapports',
      'Audit interne', ('can_manage_audit', 'can_view_reports'), ('audit_interne',)),
+    ('analyse_donnees', 'Analyse de données', 'Import ou connecteurs (bases, SFTP, Microsoft 365, Odoo, Business Central…), 63 tests (achats, comptabilité, ventes, paie, habilitations, crédit, LCB-FT), audit continu',
+     'Audit interne', ('can_use_analyse_donnees',), ()),
     ('programme_audit', 'Programme d’audit', 'Planification pluriannuelle des missions',
      'Audit interne', ('can_manage_audit_program',), ('programme_audit',)),
     ('plans_action', 'Plans d’action', 'Suivi des actions correctives',
@@ -70,7 +72,7 @@ GROUPES = ['Gestion des risques', 'Contrôle interne', 'Audit interne', 'Conform
 MODULE_DE_PERMISSION = {p: m[0] for m in CATALOGUE for p in m[4]}
 # Modules livrés sur demande : fermés tant que le super admin ne les a pas cochés pour le client
 # (même pour un client « sans restriction » ou suivant sa formule).
-SUR_ACTIVATION = {'carto_processus'}
+SUR_ACTIVATION = {'carto_processus', 'analyse_donnees'}
 
 PROFILS = {
     'audit': ('Cabinet ou service d’audit', 'Missions d’audit, programme, recommandations et plans d’action',

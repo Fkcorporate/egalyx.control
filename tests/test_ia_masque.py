@@ -57,3 +57,54 @@ def test_parametres_traduits_pour_mistral(monkeypatch):
     monkeypatch.delenv('EGALYX_IA_MODELE_MISTRAL', raising=False)
     k = P._vers_mistral({'model': 'gpt-4o-mini', 'messages': [], 'max_completion_tokens': 900, 'store': True, 'response_format': {'type': 'json_object'}})
     assert k == {'model': 'mistral-medium-latest', 'messages': [], 'max_tokens': 900, 'response_format': {'type': 'json_object'}}
+
+
+# ---------------------------------------------------------------- fournisseurs : Anthropic, DeepSeek
+def test_secours_jamais_deepseek(monkeypatch):
+    for f in P.FOURNISSEURS.values():
+        monkeypatch.delenv(f['cle'], raising=False)
+    monkeypatch.setattr(P, '_reglages', lambda: {'ia_fournisseur': 'anthropic'})
+    monkeypatch.setenv('DEEPSEEK_API_KEY', 'sk-' + 'd' * 30)
+    assert P.effectif() is None                                  # seule une clé DeepSeek : pas de secours vers la Chine
+    monkeypatch.setattr(P, '_reglages', lambda: {'ia_fournisseur': 'deepseek'})
+    assert P.effectif() == 'deepseek' and P.modele() == 'deepseek-flash'
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'sk-ant-' + 'a' * 30)
+    monkeypatch.setattr(P, '_reglages', lambda: {'ia_fournisseur': 'openai'})
+    assert P.effectif() == 'anthropic' and P.modele() == 'claude-sonnet-5-5'
+
+
+def test_parametres_deepseek(monkeypatch):
+    monkeypatch.delenv('EGALYX_IA_MODELE_DEEPSEEK', raising=False)
+    k = P._vers_compatible({'model': 'gpt-4o-mini', 'messages': [], 'max_completion_tokens': 500, 'tools': [1], 'seed': 3}, 'deepseek')
+    assert k == {'model': 'deepseek-flash', 'messages': [], 'max_tokens': 500, 'tools': [1]}
+
+
+def test_traduction_vers_anthropic(monkeypatch):
+    monkeypatch.delenv('EGALYX_IA_MODELE_ANTHROPIC', raising=False)
+    outil = {'type': 'function', 'function': {'name': 'lister_risques', 'description': 'Risques', 'parameters': {'type': 'object', 'properties': {'niveau': {'type': 'string'}}}}}
+    c = P.vers_anthropic({
+        'model': 'gpt-4o-mini', 'max_completion_tokens': 900, 'temperature': 0.2, 'response_format': {'type': 'json_object'},
+        'tools': [outil], 'tool_choice': 'auto',
+        'messages': [{'role': 'system', 'content': 'Consigne A'}, {'role': 'user', 'content': 'Question'},
+                     {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 't1', 'type': 'function',
+                                                                            'function': {'name': 'lister_risques', 'arguments': '{"niveau": "eleve"}'}}]},
+                     {'role': 'tool', 'tool_call_id': 't1', 'content': '{"total": 2}'},
+                     {'role': 'system', 'content': 'Consigne B'}]})
+    assert c['model'] == 'claude-sonnet-5-5' and c['max_tokens'] == 900 + P.ANTHROPIC_MARGE_REFLEXION and c['temperature'] == 0.2
+    assert c['system'].startswith('Consigne A') and 'Consigne B' in c['system'] and P.CONSIGNE_JSON in c['system']
+    assert [m['role'] for m in c['messages']] == ['user', 'assistant', 'user']
+    assert c['messages'][1]['content'][0] == {'type': 'tool_use', 'id': 't1', 'name': 'lister_risques', 'input': {'niveau': 'eleve'}}
+    assert c['messages'][2]['content'][0] == {'type': 'tool_result', 'tool_use_id': 't1', 'content': '{"total": 2}'}
+    assert c['tools'] == [{'name': 'lister_risques', 'description': 'Risques', 'input_schema': outil['function']['parameters']}]
+    assert 'tool_choice' not in c                                # « auto » : valeur par défaut d'Anthropic
+
+
+def test_traduction_depuis_anthropic():
+    rep = P.depuis_anthropic({'id': 'm1', 'model': 'claude-sonnet-5-5', 'stop_reason': 'end_turn', 'usage': {'input_tokens': 10, 'output_tokens': 5},
+                              'content': [{'type': 'thinking', 'thinking': '…'}, {'type': 'text', 'text': '```json\n{"a": 1}\n```'}]},
+                             json_attendu=True)
+    import json
+    assert json.loads(rep.choices[0].message.content) == {'a': 1} and rep.choices[0].message.tool_calls is None
+    rep = P.depuis_anthropic({'stop_reason': 'tool_use', 'content': [{'type': 'tool_use', 'id': 'u1', 'name': 'mes_taches', 'input': {}}]})
+    tc = rep.choices[0].message.tool_calls[0]
+    assert rep.choices[0].finish_reason == 'tool_calls' and tc.id == 'u1' and tc.function.name == 'mes_taches' and tc.function.arguments == '{}'

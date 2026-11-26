@@ -18480,6 +18480,7 @@ def gestionnaire_gerer_permissions(id):
         ('can_manage_alertes', "Référent du dispositif d'alerte"),
         ('can_view_carto_processus', 'Voir la cartographie des processus'),
         ('can_manage_carto_processus', 'Organiser la cartographie des processus'),
+        ('can_use_analyse_donnees', 'Analyse de données (missions d’audit)'),
         ('can_view_rapport_comite', "Rapport au comité d'audit"),
         ('can_sign_documents', 'Signer les documents'),
     ]

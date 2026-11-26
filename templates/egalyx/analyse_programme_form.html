@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ p.nom if p else 'Nouvelle analyse programmée' }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .pf-tests { columns: 2 320px; column-gap: 1.5rem; }
+  .pf-tests .form-check { break-inside: avoid; font-size: .86rem; margin-bottom: .2rem; }
+  .pf-dom { font-size: .78rem; font-weight: 650; color: var(--bs-secondary-color); margin-top: .5rem; break-after: avoid; }
+</style>{% endblock %}
+{% block content %}
+{% set v = form if form else {} %}
+<div class="container" style="max-width: 1000px;">
+  {% call pg.entete(p.nom if p else 'Nouvelle analyse programmée', 'fa-clock-rotate-left', 'Audit continu', retour=url_for('analyse_sources.programme', pid=p.id) if p else url_for('analyse_sources.programmes'), libelle_retour='Retour') %}{% endcall %}
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Quoi et quand') %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="pf_nom">Nom</label>
+          <input class="form-control" id="pf_nom" name="nom" required maxlength="200" value="{{ v.get('nom') or (p.nom if p else 'Paiements fournisseurs — contrôle mensuel') }}"></div>
+        <div class="col-md-6"><label class="form-label" for="pf_source">Source de données</label>
+          <select class="form-select" id="pf_source" name="source_id">{% for s in sources %}<option value="{{ s.id }}" data-jeux="{{ PAR_CODE[s.connecteur].jeux|join(',') }}" {{ 'selected' if p and p.source_id == s.id }}>{{ s.nom }} ({{ PAR_CODE[s.connecteur].nom }})</option>{% endfor %}</select></div>
+        <div class="col-12"><span class="form-label d-block">Données à lire</span>
+          <div class="d-flex flex-wrap gap-3" id="pfJeux">{% for j in ORDRE %}<div class="form-check" data-jeu="{{ j }}"><input class="form-check-input" type="checkbox" name="jeux" value="{{ j }}" id="pj_{{ j }}" {{ 'checked' if p and j in (p.jeux or []) }}><label class="form-check-label" for="pj_{{ j }}">{{ JEUX[j].libelle }}</label></div>{% endfor %}</div></div>
+        <div class="col-md-4"><label class="form-label" for="pf_periode">Période analysée</label>
+          <select class="form-select" id="pf_periode" name="periode">{% for c, l in PERIODES %}<option value="{{ c }}" {{ 'selected' if p and p.periode == c }}>{{ l }}</option>{% endfor %}</select>
+          <div class="form-text">La fin de la période sert de date de clôture.</div></div>
+        <div class="col-md-4"><label class="form-label" for="pf_freq">Fréquence</label>
+          <select class="form-select" id="pf_freq" name="frequence">{% for c, l, _n in FREQUENCES %}<option value="{{ c }}" {{ 'selected' if (p and p.frequence == c) or (not p and c == 'mensuelle') }}>{{ l }}</option>{% endfor %}</select>
+          <div class="form-text">Exécution la nuit.</div></div>
+        <div class="col-md-4"><label class="form-label" for="pf_resp">Responsable (prévenu)</label>
+          <select class="form-select" id="pf_resp" name="responsable_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if (p and p.responsable_id == u.id) or (not p and u.id == current_user.id) }}>{{ nom(u) }}</option>{% endfor %}</select></div>
+        <div class="col-12"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="actif" id="pf_actif" value="1" {{ 'checked' if not p or p.actif }}><label class="form-check-label" for="pf_actif">Active (exécution automatique)</label></div></div>
+      </div>
+    {% endcall %}
+
+    {% call pg.carte('Tests', aide='Un test sans les données nécessaires est simplement « non applicable »') %}
+      <div class="pf-tests">
+      {% for dom in DOMAINES %}<div class="pf-dom">{{ dom }}</div>
+        {% for t in TESTS if t.domaine == dom %}<div class="form-check"><input class="form-check-input" type="checkbox" name="t_{{ t.code }}" id="pt_{{ t.code }}" value="1" {{ 'checked' if p and t.code in (p.tests or []) }}><label class="form-check-label" for="pt_{{ t.code }}">{{ t.titre }}</label></div>{% endfor %}
+      {% endfor %}
+      </div>
+      <div class="mt-3"><label class="form-label" for="pf_modele">Seuils et réglages</label>
+        <select class="form-select" id="pf_modele" name="modele_parametres" style="max-width: 560px;">
+          <option value="">{{ 'Garder les réglages actuels' if p else 'Réglages par défaut de la bibliothèque' }}</option>
+          {% for an in analyses %}<option value="{{ an.id }}">Reprendre ceux de l’analyse {{ an.reference }} — {{ an.titre }}</option>{% endfor %}
+        </select>
+        <div class="form-text">Réglez les seuils une fois dans une analyse de mission (étape Tests), puis reprenez-les ici.</div></div>
+    {% endcall %}
+
+    {% call pg.carte('Suites données', aide='Facultatif') %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="pf_ref">Contrôle de 2e niveau (référentiel)</label>
+          <select class="form-select" id="pf_ref" name="referentiel_id"><option value="">— Aucun</option>{% for r in referentiels %}<option value="{{ r.id }}" {{ 'selected' if p and p.referentiel_id == r.id }}>{{ r.code_controle }} — {{ r.nom }}</option>{% endfor %}</select>
+          <div class="form-text">Les nouvelles anomalies deviennent des éléments « en anomalie » de la planification de la période ; le contrôleur les examine et soumet au validateur (non-conformités à la validation).</div></div>
+        <div class="col-md-6"><label class="form-label" for="pf_ctrl">Contrôleur N2</label>
+          <select class="form-select" id="pf_ctrl" name="controleur_id"><option value="">— Le responsable</option>{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if p and p.controleur_id == u.id }}>{{ nom(u) }}</option>{% endfor %}</select></div>
+        {% set liens = (p.kri_liens if p else []) or [] %}
+        {% for i in range(3) %}{% set l = liens[i] if liens|length > i else {} %}
+        <div class="col-md-4"><label class="form-label small" for="kri_{{ i }}">KRI {{ i + 1 }}</label>
+          <select class="form-select form-select-sm" id="kri_{{ i }}" name="kri_{{ i }}"><option value="">—</option>{% for k in kris %}<option value="{{ k.id }}" {{ 'selected' if l.kri_id == k.id }}>{{ k.reference if k.reference is defined and k.reference else '' }} {{ k.nom if k.nom is defined else k.id }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label small" for="kri_test_{{ i }}">alimenté par le test</label>
+          <select class="form-select form-select-sm" id="kri_test_{{ i }}" name="kri_test_{{ i }}"><option value="">—</option>{% for t in TESTS %}<option value="{{ t.code }}" {{ 'selected' if l.test == t.code }}>{{ t.titre }}</option>{% endfor %}</select></div>
+        <div class="col-md-4"><label class="form-label small" for="kri_mesure_{{ i }}">valeur</label>
+          <select class="form-select form-select-sm" id="kri_mesure_{{ i }}" name="kri_mesure_{{ i }}">{% for c, lib in MESURES %}<option value="{{ c }}" {{ 'selected' if l.mesure == c }}>{{ lib }}</option>{% endfor %}</select></div>
+        {% endfor %}
+      </div>
+    {% endcall %}
+    <div class="mb-4"><button class="btn btn-primary"><i class="fas fa-check me-1"></i>Enregistrer</button></div>
+  </form>
+</div>
+<script>
+(function () {
+  var s = document.getElementById('pf_source');
+  function maj() {
+    var ok = (s.options[s.selectedIndex] || {}).dataset ? s.options[s.selectedIndex].dataset.jeux.split(',') : [];
+    document.querySelectorAll('#pfJeux [data-jeu]').forEach(function (d) {
+      var dispo = ok.indexOf(d.dataset.jeu) >= 0; d.style.display = dispo ? '' : 'none';
+      if (!dispo) d.querySelector('input').checked = false;
+    });
+  }
+  s.addEventListener('change', maj); maj();
+})();
+</script>
+{% endblock %}

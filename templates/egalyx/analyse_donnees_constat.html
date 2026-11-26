@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Constat — {{ r.titre }} — {{ an.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ak-origine { display: none; border-radius: 8px; padding: .5rem .75rem; font-size: .84rem; margin-bottom: 1rem; }
+  .ak-origine.ia { display: block; background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+  .ak-origine.automatique { display: block; background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  .ak-c { font-weight: 700; color: var(--bs-primary); margin-right: .3rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete('Rédiger le constat', 'fa-flag', r.titre ~ ' · ' ~ an.reference ~ ' · mission ' ~ audit.reference, retour=url_for('analyse_donnees.detail_test', analyse_id=an.id, code=r.code), libelle_retour='Retour aux anomalies') %}{% endcall %}
+
+  {% if fige %}<div class="alert alert-secondary small"><i class="fas fa-lock me-2"></i>Dossier figé : aucun constat ne peut être ajouté.</div>{% else %}
+  <p class="pg-second">Projet pré-rempli à partir des résultats et de la bibliothèque de tests. Relisez-le : rien n’est enregistré tant que vous n’avez pas cliqué « Créer le constat ».
+    Les cas relevés doivent être confirmés par les pièces avant d’être présentés comme des écarts.</p>
+  {% if ia_ok %}
+  <button type="button" class="btn btn-sm btn-outline-primary mb-3" id="akIA">
+    <span class="ak-l"><i class="fas fa-wand-magic-sparkles me-1"></i>Reformuler avec l’IA</span>
+    <span class="ak-a d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Rédaction…</span>
+  </button>
+  {% endif %}
+  <div class="ak-origine" id="akOrigine" role="status"></div>
+
+  <form method="POST" id="akForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="ia" id="akIa" value="0">
+    {% call pg.carte() %}
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label" for="ak_titre">Intitulé</label>
+          <input class="form-control" id="ak_titre" name="titre" maxlength="150" value="{{ c.titre }}"></div>
+        <div class="col-md-4"><label class="form-label" for="ak_gravite">Gravité</label>
+          <select class="form-select" id="ak_gravite" name="gravite">{% for g in ('mineure', 'moyenne', 'majeure', 'critique') %}<option value="{{ g }}" {{ 'selected' if g == c.gravite }}>{{ g|capitalize }}</option>{% endfor %}</select></div>
+        <div class="col-12"><label class="form-label" for="ak_fait"><span class="ak-c">Fait</span>ce qui a été observé</label>
+          <textarea class="form-control" id="ak_fait" name="fait" rows="6" required>{{ c.fait }}</textarea></div>
+        <div class="col-md-6"><label class="form-label" for="ak_critere"><span class="ak-c">Critère</span>règle attendue</label>
+          <textarea class="form-control" id="ak_critere" name="critere" rows="3">{{ c.critere }}</textarea></div>
+        <div class="col-md-6"><label class="form-label" for="ak_cause"><span class="ak-c">Cause</span></label>
+          <textarea class="form-control" id="ak_cause" name="cause" rows="3">{{ c.cause }}</textarea></div>
+        <div class="col-md-6"><label class="form-label" for="ak_consequence"><span class="ak-c">Conséquence</span>risque, impact</label>
+          <textarea class="form-control" id="ak_consequence" name="consequence" rows="3">{{ c.consequence }}</textarea></div>
+        <div class="col-md-6"><label class="form-label" for="ak_recommandation"><span class="ak-c">Recommandation</span></label>
+          <textarea class="form-control" id="ak_recommandation" name="recommandation" rows="3">{{ c.recommandation }}</textarea></div>
+      </div>
+      <div id="akPoints" class="small mt-3">
+        <strong>À vérifier avant de valider :</strong>
+        <ul class="mb-0">{% for p in c.points_a_verifier %}<li>{{ p }}</li>{% endfor %}</ul>
+      </div>
+    {% endcall %}
+    <div class="d-flex gap-2 align-items-center mb-4">
+      <button class="btn btn-primary"><i class="fas fa-check me-1"></i>Créer le constat</button>
+      <span class="pg-second">Il est ajouté à la mission avec le statut « à analyser » et la référence de l’analyse ({{ an.reference }}) en pièce.</span>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% if ia_ok and not fige %}
+<script>
+(function () {
+  var b = document.getElementById('akIA'), o = document.getElementById('akOrigine');
+  var champs = { titre: 'ak_titre', fait: 'ak_fait', critere: 'ak_critere', cause: 'ak_cause', consequence: 'ak_consequence', recommandation: 'ak_recommandation', gravite: 'ak_gravite' };
+  b.addEventListener('click', function () {
+    b.disabled = true; b.querySelector('.ak-l').classList.add('d-none'); b.querySelector('.ak-a').classList.remove('d-none');
+    fetch('{{ url_for('analyse_donnees.constat_ia', analyse_id=an.id, code=r.code) }}', { method: 'POST', credentials: 'same-origin',
+      headers: { 'X-CSRFToken': (document.querySelector('meta[name="csrf-token"]') || {}).content || '' } })
+      .then(function (x) { return x.json(); })
+      .then(function (d) {
+        if (!d.success) { o.className = 'ak-origine automatique'; o.textContent = d.error || 'Proposition impossible.'; return; }
+        Object.keys(champs).forEach(function (k) { if (d.constat[k]) document.getElementById(champs[k]).value = d.constat[k]; });
+        var ul = document.querySelector('#akPoints ul'); ul.innerHTML = '';
+        (d.constat.points_a_verifier || []).forEach(function (p) { var li = document.createElement('li'); li.textContent = p; ul.appendChild(li); });
+        document.getElementById('akIa').value = d.origine === 'ia' ? '1' : '0';
+        o.className = 'ak-origine ' + d.origine;
+        o.textContent = d.origine === 'ia' ? 'Reformulé par l’IA à partir des résultats (données masquées). Relisez chaque rubrique.' : 'IA indisponible : le projet automatique est conservé.';
+      })
+      .catch(function () { o.className = 'ak-origine automatique'; o.textContent = 'Connexion interrompue.'; })
+      .finally(function () { b.disabled = false; b.querySelector('.ak-l').classList.remove('d-none'); b.querySelector('.ak-a').classList.add('d-none'); });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

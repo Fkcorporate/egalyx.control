@@ -135,6 +135,9 @@ FONCTIONS = [
      "L'assistant comprend les questions en langage courant et va chercher les données (risques, recommandations, "
      "couverture d'audit, indicateurs…) avec les droits de l'utilisateur. Coupé : l'assistant répond quand même "
      "aux questions courantes, sans IA, sans qu'aucune donnée ne sorte du serveur."),
+    ('analyse_donnees', 'Analyse de données',
+     "Correspondance des colonnes à l'import (l'IA ne voit que les noms de colonnes), synthèse des résultats et "
+     "rédaction du constat (chiffres agrégés et quelques anomalies masquées). Coupé : les tests tournent quand même, sans IA."),
     ('premier_jet_rapport', 'Premier jet du rapport d’audit',
      "Résumé exécutif et conclusion rédigés à partir des constats et recommandations de la mission ; "
      "l'auditeur corrige puis valide. Seul le texte validé figure dans le rapport."),

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Colonnes — {{ info.libelle }} — {{ an.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ac-ligne { display: grid; grid-template-columns: minmax(200px, 260px) minmax(220px, 1fr) minmax(150px, 220px); gap: .4rem 1rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .ac-ligne:last-child { border-bottom: 0; }
+  .ac-ligne label { font-size: .88rem; font-weight: 600; margin: 0; }
+  .ac-ligne .ac-ob { color: #a51d2d; margin-left: .2rem; }
+  .ac-ligne .ac-q { font-size: .78rem; color: var(--bs-secondary-color); }
+  .ac-ligne .ac-q.alerte { color: var(--bs-warning-text-emphasis); }
+  .ac-apercu { font-size: .78rem; }
+  .ac-apercu th { white-space: nowrap; }
+  .ac-apercu td { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .ac-msg { display: none; font-size: .82rem; border-radius: 8px; padding: .45rem .7rem; margin-top: .6rem; }
+  .ac-msg.ia { display: block; background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+  .ac-msg.automatique { display: block; background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  @media (max-width: 720px) { .ac-ligne { grid-template-columns: 1fr; } }
+</style>{% endblock %}
+{% block content %}
+{% set q = j.qualite or {} %}
+{% set qchamps = {} %}{% for c in q.champs or [] %}{% set _ = qchamps.update({c.code: c}) %}{% endfor %}
+<div class="container" style="max-width: 1060px;">
+  {% call pg.entete('Correspondance des colonnes — ' ~ info.libelle, 'fa-table-columns', j.nom_fichier ~ ' · ' ~ j.nb_lignes ~ ' lignes · ' ~ an.reference, retour=url_for('analyse_donnees.page', analyse_id=an.id, etape='donnees'), libelle_retour='Retour aux données') %}{% endcall %}
+
+  {% call pg.carte('Fichier lu', aide='Empreinte SHA-256 : ' ~ j.empreinte[:24] ~ '…') %}
+    <p class="small mb-2">Format {{ infos.format }}{% if infos.separateur %}, séparateur « {{ infos.separateur }} »{% endif %}{% if infos.encodage %}, encodage {{ infos.encodage }}{% endif %}{% if infos.feuille %}, feuille « {{ infos.feuille }} »{% endif %} ;
+      en-têtes trouvés à la ligne {{ infos.premiere_ligne - 1 }}.
+      {% if infos.feuilles|length > 1 %}<br><span class="pg-second">Le classeur contient plusieurs feuilles ({{ infos.feuilles|join(', ') }}). Pour en lire une autre, réimportez le fichier en indiquant son nom :</span>{% endif %}</p>
+    {% if infos.feuilles|length > 1 and not fige %}
+    <form method="POST" enctype="multipart/form-data" action="{{ url_for('analyse_donnees.importer', analyse_id=an.id, type_jeu=j.type_jeu) }}" class="d-flex gap-2 flex-wrap mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="feuille" class="form-select form-select-sm" style="width: auto;" aria-label="Feuille du classeur">{% for f in infos.feuilles %}<option {{ 'selected' if f == infos.feuille }}>{{ f }}</option>{% endfor %}</select>
+      <input type="file" name="fichier" accept=".xlsx,.xlsm" class="form-control form-control-sm" style="max-width: 320px;" required aria-label="Même fichier">
+      <button class="btn btn-sm btn-outline-primary">Lire cette feuille</button>
+    </form>
+    {% endif %}
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered ac-apercu mb-0">
+        <thead><tr>{% for e in entetes %}<th>{{ e }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for l in apercu %}<tr>{% for v in l %}<td title="{{ v }}">{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <p class="pg-second mb-0 mt-1">Aperçu des {{ apercu|length }} premières lignes.</p>
+  {% endcall %}
+
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Quelle colonne correspond à quoi ?', aide='* indispensable') %}
+      <p class="pg-second">Proposition faite à partir des noms de colonnes : vérifiez-la. Laissez « — » si votre fichier n’a pas l’information ; les tests qui en ont besoin seront signalés « non applicables ».</p>
+      {% for code, lib, ob, typ, _s in champs %}
+      {% set qc = qchamps.get(code) %}
+      <div class="ac-ligne">
+        <label for="c_{{ code }}">{{ lib }}{% if ob %}<span class="ac-ob" aria-label="indispensable">*</span>{% endif %}</label>
+        <select class="form-select form-select-sm" id="c_{{ code }}" name="c_{{ code }}" data-champ="{{ code }}" {{ 'disabled' if fige }}>
+          <option value="">—</option>
+          {% for e in entetes %}<option value="{{ e }}" {{ 'selected' if (j.correspondance or {}).get(code) == e }}>{{ e }}</option>{% endfor %}
+        </select>
+        <div class="ac-q {{ 'alerte' if qc and (qc.erreurs or (qc.obligatoire and qc.vides)) }}">
+          {% if j.statut == 'pret' and qc and qc.colonne %}
+            {% if qc.erreurs %}{{ qc.erreurs }} valeur(s) illisible(s){% if qc.exemples %} (ligne {{ qc.exemples[0].ligne }} : « {{ qc.exemples[0].valeur }} »){% endif %}{% elif qc.vides %}{{ qc.vides }} vide(s){% else %}<i class="fas fa-check text-success me-1"></i>Complet{% endif %}
+          {% else %}{{ {'id': 'Identifiant', 'texte': 'Texte', 'nom': 'Nom', 'date': 'Date jj/mm/aaaa', 'montant': 'Montant', 'nombre': 'Nombre', 'rib': 'RIB / IBAN', 'telephone': 'Téléphone', 'horodatage': 'Date et heure'}[typ] }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% if ia_ok and not fige %}
+      <button type="button" class="btn btn-sm btn-outline-primary mt-3" id="acIA">
+        <span class="ac-l"><i class="fas fa-wand-magic-sparkles me-1"></i>Proposer avec l’IA</span>
+        <span class="ac-a d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Proposition…</span>
+      </button>
+      <span class="pg-second ms-2">L’IA ne reçoit que les noms des colonnes, jamais les données.</span>
+      <div class="ac-msg" id="acMsg" role="status"></div>
+      {% endif %}
+    {% endcall %}
+
+    {% if j.statut == 'pret' and (q.avertissements or q.doublons_exacts is defined) %}
+    {% call pg.carte('Contrôle de qualité') %}
+      <dl class="pg-dl">
+        <dt>Lignes lues</dt><dd>{{ q.lignes }}</dd>
+        {% if q.total_credit is defined %}<dt>Total débit / crédit</dt><dd>{{ '{:,.2f}'.format(q.total).replace(',', ' ').replace('.', ',') }} / {{ '{:,.2f}'.format(q.total_credit).replace(',', ' ').replace('.', ',') }} {{ an.devise }} <span class="pg-second">— à rapprocher de la balance</span></dd>
+        {% elif q.total is defined %}<dt>Total des montants</dt><dd>{{ '{:,.2f}'.format(q.total).replace(',', ' ').replace('.', ',') }} {{ an.devise }} <span class="pg-second">— à rapprocher de la comptabilité</span></dd>{% endif %}
+        {% if q.periode %}<dt>Période</dt><dd>{{ q.periode[0] }} → {{ q.periode[1] }}</dd>{% endif %}
+        {% if q.negatifs %}<dt>Montants négatifs</dt><dd>{{ q.negatifs }}</dd>{% endif %}
+        {% if q.doublons_exacts is defined %}<dt>Lignes identiques</dt><dd>{{ q.doublons_exacts }}</dd>{% endif %}
+      </dl>
+      {% if q.avertissements %}<ul class="small mt-2 mb-0 text-warning-emphasis">{% for w in q.avertissements %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+    {% endcall %}
+    {% endif %}
+
+    {% if not fige %}
+    <div class="d-flex gap-2 align-items-center flex-wrap mb-4">
+      <button class="btn btn-primary"><i class="fas fa-check me-1"></i>{{ 'Valider à nouveau' if j.statut == 'pret' else 'Valider et contrôler la qualité' }}</button>
+      <span class="pg-second">Les dates sont lues jour/mois/année ; une valeur illisible est signalée, jamais devinée.</span>
+    </div>
+    {% endif %}
+  </form>
+</div>
+{% if ia_ok and not fige %}
+<script>
+(function () {
+  var b = document.getElementById('acIA'), msg = document.getElementById('acMsg');
+  b.addEventListener('click', function () {
+    b.disabled = true; b.querySelector('.ac-l').classList.add('d-none'); b.querySelector('.ac-a').classList.remove('d-none');
+    fetch('{{ url_for('analyse_donnees.colonnes_ia', analyse_id=an.id, type_jeu=j.type_jeu) }}', { method: 'POST', credentials: 'same-origin',
+      headers: { 'X-CSRFToken': (document.querySelector('meta[name="csrf-token"]') || {}).content || '' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.success) { msg.className = 'ac-msg automatique'; msg.textContent = d.error || 'Proposition impossible.'; return; }
+        document.querySelectorAll('select[data-champ]').forEach(function (s) { s.value = d.correspondance[s.dataset.champ] || ''; });
+        msg.className = 'ac-msg ' + d.origine; msg.textContent = d.message;
+      })
+      .catch(function () { msg.className = 'ac-msg automatique'; msg.textContent = 'Connexion interrompue.'; })
+      .finally(function () { b.disabled = false; b.querySelector('.ac-l').classList.remove('d-none'); b.querySelector('.ac-a').classList.add('d-none'); });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

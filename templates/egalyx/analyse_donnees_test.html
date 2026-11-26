@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ r.titre }} — {{ an.reference }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .at-niveau { font-size: .74rem; border-radius: 999px; padding: .12rem .6rem; font-weight: 600; }
+  .at-niveau.eleve { background: #fde8ea; color: #a51d2d; } .at-niveau.moyen { background: #fff1d6; color: #8a5300; } .at-niveau.faible { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .at-groupe td { border-top: 2px solid var(--bs-border-color) !important; }
+  .at-g { display: inline-block; min-width: 1.6rem; text-align: center; border-radius: 6px; background: var(--bs-tertiary-bg); font-size: .74rem; font-weight: 600; }
+  .at-motif { font-size: .82rem; min-width: 260px; }
+  .at-benford td, .at-benford th { text-align: right; }
+  .at-benford td:first-child, .at-benford th:first-child { text-align: center; }
+  .at-barre { height: 8px; border-radius: 4px; background: var(--bs-primary); display: inline-block; vertical-align: middle; }
+  .at-barre.att { background: var(--bs-secondary-color); opacity: .4; }
+  .at-sur { color: #a51d2d; font-weight: 600; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1180px;">
+  {% call pg.entete(r.titre, 'fa-triangle-exclamation', an.reference ~ ' · ' ~ test.domaine ~ ' · mission ' ~ audit.reference, retour=url_for('analyse_donnees.page', analyse_id=an.id, etape='resultats'), libelle_retour='Tous les résultats') %}
+    <a class="btn btn-sm btn-outline-success" href="{{ url_for('analyse_donnees.export', analyse_id=an.id) }}"><i class="fas fa-file-excel me-1"></i>Exporter</a>
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Population analysée', r.population) }}
+    {{ pg.kpi('Cas', r.cas, '#a51d2d') }}
+    {{ pg.kpi('Lignes concernées', r.nb) }}
+    {% if r.montant and r.code not in ('CONCENTRATION', 'BENFORD') %}{{ pg.kpi('Montant concerné', fr(r.montant, an.devise)) }}{% endif %}
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-7">
+    {% call pg.carte('Ce que le test détecte') %}
+      <p class="small mb-2"><span class="at-niveau {{ test.niveau }}">Risque {{ NIVEAUX[test.niveau][0]|lower }}</span> {{ test.description }}</p>
+      <dl class="pg-dl small">
+        <dt>Règle attendue</dt><dd>{{ test.critere }}</dd>
+        <dt>Risque</dt><dd>{{ test.consequence }}</dd>
+        {% for code, lib, defaut, aide in test.params %}{% if r.parametres[code]|string|trim %}<dt>{{ lib }}</dt><dd style="white-space: pre-line;">{{ fr(r.parametres[code]) if r.parametres[code] is number and r.parametres[code] >= 1000 else r.parametres[code] }}</dd>{% endif %}{% endfor %}
+      </dl>
+    {% endcall %}
+    </div>
+    <div class="col-lg-5">
+    {% call pg.carte('Suite à donner') %}
+      {% if fige %}<p class="pg-second mb-0"><i class="fas fa-lock me-1"></i>Dossier figé.</p>{% else %}
+      <div class="d-grid gap-2">
+        {% if lien.feuille %}
+          <div class="small"><i class="fas fa-check text-success me-1"></i>Feuille de travail <strong>{{ lien.feuille }}</strong> créée.</div>
+        {% else %}
+        <form method="POST" action="{{ url_for('analyse_donnees.creer_feuille', analyse_id=an.id, code=r.code) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-primary w-100 text-start"><i class="fas fa-file-lines me-2"></i>Créer la feuille de travail
+            <span class="d-block pg-second ms-4">Test exhaustif : les {{ r.nb }} anomalies sont les éléments à examiner</span></button>
+        </form>
+        {% endif %}
+        {% if lien.constat %}
+          <div class="small"><i class="fas fa-check text-success me-1"></i>Constat <strong>{{ lien.constat }}</strong> créé. <a href="{{ url_for('analyse_donnees.constat', analyse_id=an.id, code=r.code) }}">En rédiger un autre</a></div>
+        {% else %}
+        <a class="btn btn-outline-primary w-100 text-start" href="{{ url_for('analyse_donnees.constat', analyse_id=an.id, code=r.code) }}"><i class="fas fa-flag me-2"></i>Rédiger le constat
+          <span class="d-block pg-second ms-4">Fait, critère, cause, conséquence, recommandation pré-remplis{{ ' (ou par l’IA)' if ia_ok }}</span></a>
+        {% endif %}
+        <a class="btn btn-outline-secondary w-100 text-start" href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='resultats') }}#echantillon"><i class="fas fa-shuffle me-2"></i>Tirer un échantillon</a>
+      </div>
+      {% endif %}
+    {% endcall %}
+    </div>
+  </div>
+
+  {% if r.tableau and r.code == 'BENFORD' %}
+  {% call pg.carte('Répartition des premiers chiffres', aide='Écart moyen (MAD) : ' ~ r.tableau.mad ~ ' — ' ~ r.tableau.conformite) %}
+    <table class="pg-table at-benford">
+      <thead><tr><th>Chiffre</th><th>Nombre</th><th>Observé</th><th>Attendu</th><th>Écart (z)</th><th style="text-align: left;">Comparaison</th></tr></thead>
+      <tbody>{% for x in r.tableau.tableau %}<tr class="{{ 'at-sur' if x.chiffre in r.tableau.sur_representes }}">
+        <td>{{ x.chiffre }}</td><td>{{ x.nombre }}</td><td>{{ x.observe }} %</td><td>{{ x.attendu }} %</td><td>{{ x.z }}</td>
+        <td style="text-align: left;"><span class="at-barre" style="width: {{ (x.observe * 4)|round|int }}px"></span><br><span class="at-barre att" style="width: {{ (x.attendu * 4)|round|int }}px"></span></td></tr>{% endfor %}</tbody>
+    </table>
+    <p class="pg-second mb-0 mt-2">Seuils (Nigrini, premier chiffre) : ≤ 0,006 conformité étroite ; ≤ 0,012 acceptable ; ≤ 0,015 marginale ; au-delà, non-conformité. En rouge : chiffres significativement sur-représentés (z &gt; 1,96).</p>
+  {% endcall %}
+  {% elif r.tableau and r.code == 'CONCENTRATION' %}
+  {% call pg.carte('Principaux fournisseurs', aide=r.tableau.fournisseurs ~ ' fournisseurs, total ' ~ fr(r.tableau.total, an.devise)) %}
+    <table class="pg-table">
+      <thead><tr><th>Fournisseur</th><th class="pg-num">Opérations</th><th class="pg-num">Montant</th><th class="pg-num">Part</th><th class="pg-num">Cumul</th></tr></thead>
+      <tbody>{% for x in r.tableau.tableau %}<tr><td>{{ x.tiers }}</td><td class="pg-num">{{ x.nombre }}</td><td class="pg-num">{{ fr(x.montant) }}</td><td class="pg-num">{{ x.part }} %</td><td class="pg-num">{{ x.cumul }} %</td></tr>{% endfor %}</tbody>
+    </table>
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('Anomalies à examiner', aide=(r.nb ~ ' ligne(s)' ~ (' — les 500 premières par montant ; liste complète dans l’export' if r.tronque else ''))) %}
+    <form method="GET" class="d-flex gap-2 mb-3" role="search">
+      <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" style="max-width: 340px;" placeholder="Référence, fournisseur, motif…" aria-label="Filtrer les anomalies">
+      <button class="btn btn-sm btn-outline-secondary">Filtrer</button>
+      {% if q %}<a class="btn btn-sm btn-link" href="{{ url_for('analyse_donnees.detail_test', analyse_id=an.id, code=r.code) }}">Effacer</a>{% endif %}
+    </form>
+    {% if anomalies %}
+    {% set plusieurs_jeux = anomalies|map(attribute='jeu')|unique|list|length > 1 %}
+    <div class="table-responsive">
+    <table class="pg-table">
+      <thead><tr>{% if anomalies|selectattr('groupe')|list %}<th>Cas</th>{% endif %}{% if plusieurs_jeux %}<th>Données</th>{% endif %}<th class="pg-num">Ligne</th><th>Référence</th><th>Tiers</th><th>Date</th><th class="pg-num">Montant</th><th>Motif</th></tr></thead>
+      <tbody>
+      {% set ns = namespace(g=none) %}
+      {% set avec_groupe = anomalies|selectattr('groupe')|list %}
+      {% for x in anomalies %}
+        <tr class="{{ 'at-groupe' if avec_groupe and x.groupe != ns.g and not loop.first }}">
+          {% if avec_groupe %}<td>{% if x.groupe != ns.g %}<span class="at-g">{{ x.groupe or '' }}</span>{% endif %}</td>{% endif %}
+          {% if plusieurs_jeux %}<td>{{ JEUX[x.jeu].libelle }}</td>{% endif %}
+          <td class="pg-num">{{ x.ligne or '—' }}</td>
+          <td class="pg-ref">{{ x.ref or '—' }}</td>
+          <td>{{ x.tiers }}</td>
+          <td style="white-space: nowrap;">{% if x.date %}{{ x.date[8:10] }}/{{ x.date[5:7] }}/{{ x.date[:4] }}{% else %}—{% endif %}</td>
+          <td class="pg-num">{{ fr(x.montant) if x.montant is not none else '—' }}</td>
+          <td class="at-motif">{{ x.motif }}</td>
+        </tr>
+        {% set ns.g = x.groupe %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="pg-second mb-0 mt-2">« Ligne » : numéro de la ligne dans le fichier d’origine, pour retrouver l’élément dans l’extraction.</p>
+    {% else %}{{ pg.vide('Aucune anomalie ne correspond au filtre.') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

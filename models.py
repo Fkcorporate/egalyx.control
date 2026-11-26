@@ -21808,3 +21808,118 @@ class VersionLogigramme(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', foreign_keys=[user_id])
+
+
+class AnalyseDonnees(db.Model):
+    """Analyse des données d'audit rattachée à une mission (egalyx/analyse_donnees.py) : jeux importés,
+    tests choisis et réglages, résultats figés au moment de l'exécution (piste d'audit)."""
+    __tablename__ = 'analyses_donnees'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    audit_id = db.Column(db.Integer, db.ForeignKey('audits.id'), nullable=False, index=True)
+    reference = db.Column(db.String(40))
+    titre = db.Column(db.String(200), nullable=False)
+    devise = db.Column(db.String(10), default='FCFA')
+    tests_choisis = db.Column(db.JSON)            # liste de codes
+    parametres = db.Column(db.JSON)               # {code_test: {param: valeur}}
+    resultats = db.Column(db.JSON)                # {code_test: résultat}, figés à l'exécution
+    execution = db.Column(db.JSON)                # date, auteur, empreintes des fichiers utilisés, durée
+    synthese = db.Column(db.JSON)                 # {texte, origine, le, par}
+    liens = db.Column(db.JSON)                    # {code_test: {feuille, constat}} : ce qui a été créé depuis l'analyse
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JeuDonneesAnalyse(db.Model):
+    """Fichier importé pour une analyse : empreinte SHA-256 du fichier d'origine, correspondance des colonnes,
+    contrôle de qualité. Le contenu est chiffré sur le disque et supprimé à l'échéance de conservation."""
+    __tablename__ = 'analyses_donnees_jeux'
+    id = db.Column(db.Integer, primary_key=True)
+    analyse_id = db.Column(db.Integer, db.ForeignKey('analyses_donnees.id'), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    type_jeu = db.Column(db.String(30), nullable=False)   # fournisseurs, factures, paiements, commandes, salaries
+    nom_fichier = db.Column(db.String(255))
+    empreinte = db.Column(db.String(64))
+    taille = db.Column(db.Integer)
+    format = db.Column(db.String(20))
+    feuille = db.Column(db.String(100))
+    entetes = db.Column(db.JSON)
+    correspondance = db.Column(db.JSON)
+    qualite = db.Column(db.JSON)
+    nb_lignes = db.Column(db.Integer)
+    statut = db.Column(db.String(20), default='a_valider')  # a_valider, pret, supprime
+    chemin_brut = db.Column(db.String(400))
+    chemin_normalise = db.Column(db.String(400))
+    chiffre = db.Column(db.Boolean, default=False)
+    importe_par = db.Column(db.Integer, db.ForeignKey('user.id'))
+    importe_le = db.Column(db.DateTime, default=datetime.utcnow)
+    expire_le = db.Column(db.DateTime)
+    supprime_le = db.Column(db.DateTime)
+
+
+class SourceAnalyse(db.Model):
+    """Connexion d'une organisation à l'un de ses systèmes (base de données, SFTP, Microsoft 365, Odoo…) pour
+    l'analyse de données (egalyx/analyse_sources.py). Les secrets sont chiffrés (EGALYX_CLE_CHIFFREMENT)."""
+    __tablename__ = 'analyses_sources'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    nom = db.Column(db.String(150), nullable=False)
+    connecteur = db.Column(db.String(40), nullable=False)
+    parametres = db.Column(db.JSON)                # réglages non secrets + extractions par type de données
+    secrets = db.Column(db.JSON)                   # {cle: valeur chiffrée}
+    actif = db.Column(db.Boolean, default=True)
+    dernier_test_le = db.Column(db.DateTime)
+    dernier_test_ok = db.Column(db.Boolean)
+    dernier_message = db.Column(db.String(500))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AnalyseProgrammee(db.Model):
+    """Analyse de données relancée automatiquement (audit continu) : source, tests, période glissante, fréquence ;
+    alimente le contrôle de 2e niveau (éléments en anomalie d'une planification) et des KRI."""
+    __tablename__ = 'analyses_programmees'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    nom = db.Column(db.String(200), nullable=False)
+    source_id = db.Column(db.Integer, db.ForeignKey('analyses_sources.id'), nullable=False)
+    jeux = db.Column(db.JSON)
+    tests = db.Column(db.JSON)
+    parametres = db.Column(db.JSON)
+    periode = db.Column(db.String(30), default='mois_precedent')
+    frequence = db.Column(db.String(20), default='mensuelle')      # quotidienne, hebdomadaire, mensuelle
+    referentiel_id = db.Column(db.Integer, db.ForeignKey('referentiel_controles.id'), nullable=True)
+    controleur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    kri_liens = db.Column(db.JSON)                                 # [{kri_id, test, mesure}]
+    responsable_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    actif = db.Column(db.Boolean, default=True)
+    etat = db.Column(db.JSON)                                      # planification N2 en cours, etc.
+    prochaine_execution = db.Column(db.DateTime, index=True)
+    derniere_execution = db.Column(db.DateTime)
+    dernier_statut = db.Column(db.String(20))
+    dernier_message = db.Column(db.String(500))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ExecutionAnalyseProgrammee(db.Model):
+    """Historique des exécutions d'une analyse programmée : données lues (empreintes), résultats, suites données."""
+    __tablename__ = 'analyses_programmees_executions'
+    id = db.Column(db.Integer, primary_key=True)
+    programme_id = db.Column(db.Integer, db.ForeignKey('analyses_programmees.id'), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    debut = db.Column(db.DateTime, default=datetime.utcnow)
+    fin = db.Column(db.DateTime)
+    declenchement = db.Column(db.String(20))                       # automatique, manuel
+    statut = db.Column(db.String(20))                              # ok, erreur
+    message = db.Column(db.Text)
+    periode_debut = db.Column(db.Date)
+    periode_fin = db.Column(db.Date)
+    jeux = db.Column(db.JSON)
+    resultats = db.Column(db.JSON)
+    nouvelles = db.Column(db.Integer, default=0)
+    suites = db.Column(db.JSON)                                    # planification N2, mesures KRI, notifications
+    par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)

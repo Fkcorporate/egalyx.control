@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ an.reference }} — Analyse de données{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .ad-etapes { display: flex; gap: 0; margin: 0 0 1.25rem; border: 1px solid var(--bs-border-color); border-radius: 12px; overflow: hidden; background: var(--bs-body-bg); }
+  .ad-etapes a { flex: 1; display: flex; align-items: center; gap: .65rem; padding: .75rem 1rem; text-decoration: none; color: var(--bs-secondary-color); border-right: 1px solid var(--bs-border-color); }
+  .ad-etapes a:last-child { border-right: 0; }
+  .ad-etapes a .ad-n { width: 1.7rem; height: 1.7rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; background: var(--bs-tertiary-bg); flex: none; }
+  .ad-etapes a strong { display: block; color: var(--bs-body-color); font-size: .92rem; }
+  .ad-etapes a small { font-size: .76rem; }
+  .ad-etapes a.actif { background: var(--bs-primary-bg-subtle); }
+  .ad-etapes a.actif .ad-n { background: var(--bs-primary); color: #fff; }
+  .ad-etapes a.fait .ad-n { background: var(--bs-success); color: #fff; }
+  .ad-jeux { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1rem; }
+  .ad-jeu { border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 1rem 1.1rem; background: var(--bs-body-bg); display: flex; flex-direction: column; gap: .55rem; }
+  .ad-jeu.pret { border-left: 4px solid var(--bs-success); }
+  .ad-jeu.a_valider { border-left: 4px solid var(--bs-warning); }
+  .ad-jeu h3 { font-size: .98rem; font-weight: 650; margin: 0; display: flex; align-items: center; gap: .5rem; }
+  .ad-jeu h3 i { color: var(--bs-primary); width: 1.1rem; }
+  .ad-jeu .ad-aide { font-size: .8rem; color: var(--bs-secondary-color); margin: 0; }
+  .ad-jeu dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem .8rem; font-size: .82rem; margin: 0; }
+  .ad-jeu dt { color: var(--bs-secondary-color); font-weight: 500; }
+  .ad-jeu dd { margin: 0; overflow-wrap: anywhere; }
+  .ad-empreinte { font-family: var(--bs-font-monospace); font-size: .74rem; }
+  .ad-vigilance { font-size: .8rem; background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); border-radius: 8px; padding: .45rem .6rem; margin: 0; }
+  .ad-vigilance li { margin-left: -.6rem; }
+  .ad-actions { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: auto; padding-top: .3rem; align-items: center; }
+  .ad-source summary { color: var(--bs-primary); cursor: pointer; }
+  .ad-test { display: grid; grid-template-columns: auto 1fr; gap: .2rem .7rem; padding: .75rem 0; border-bottom: 1px solid var(--bs-border-color); }
+  .ad-test:last-child { border-bottom: 0; }
+  .ad-test .form-check-input { margin-top: .25rem; }
+  .ad-test-titre { font-weight: 600; font-size: .92rem; }
+  .ad-test-desc { font-size: .82rem; color: var(--bs-secondary-color); }
+  .ad-test-manque { font-size: .78rem; color: var(--bs-secondary-color); font-style: italic; }
+  .ad-test-ok { font-size: .78rem; color: var(--bs-success-text-emphasis); }
+  .ad-params { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .35rem; }
+  .ad-params label { font-size: .74rem; color: var(--bs-secondary-color); display: block; margin-bottom: .1rem; }
+  .ad-params input, .ad-params textarea { font-size: .82rem; }
+  .ad-niveau { font-size: .7rem; border-radius: 999px; padding: .08rem .5rem; font-weight: 600; margin-left: .35rem; white-space: nowrap; }
+  .ad-niveau.eleve { background: #fde8ea; color: #a51d2d; } .ad-niveau.moyen { background: #fff1d6; color: #8a5300; } .ad-niveau.faible { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+  .ad-domaine { font-size: .78rem; font-weight: 650; color: var(--bs-secondary-color); margin: 1rem 0 .1rem; }
+  .ad-domaine:first-child { margin-top: 0; }
+  .ad-cycle { font-size: 1rem; font-weight: 650; margin: 1.4rem 0 .6rem; }
+  .ad-cycle:first-of-type { margin-top: .2rem; }
+  .ad-cloture { display: flex; gap: .75rem 1.25rem; align-items: center; flex-wrap: wrap; }
+  .ad-barre { position: sticky; bottom: 0; background: var(--bs-body-bg); border-top: 1px solid var(--bs-border-color); padding: .7rem 0; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; z-index: 3; }
+  .ad-res tr.na td { color: var(--bs-secondary-color); }
+  .ad-statut { font-size: .76rem; white-space: nowrap; }
+  .ad-synthese { white-space: pre-line; font-size: .9rem; }
+  .ad-origine { font-size: .78rem; border-radius: 6px; padding: .2rem .5rem; display: inline-block; }
+  .ad-origine.ia { background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+  .ad-origine.automatique { background: var(--bs-warning-bg-subtle); color: var(--bs-warning-text-emphasis); }
+  @media (max-width: 720px) { .ad-etapes { flex-direction: column; } .ad-etapes a { border-right: 0; border-bottom: 1px solid var(--bs-border-color); } }
+</style>{% endblock %}
+{% block content %}
+{% macro ligne_test(t) %}
+        {% set manque = applicables.get(t.code) %}{% set p = parametres(t) %}
+        <div class="ad-test" data-applicable="{{ '1' if not manque else '0' }}">
+          <input class="form-check-input" type="checkbox" name="t_{{ t.code }}" id="t_{{ t.code }}" value="1"
+                 {{ 'checked' if t.code in (an.tests_choisis or []) and not manque }} {{ 'disabled' if fige }}>
+          <div>
+            <label for="t_{{ t.code }}" class="ad-test-titre">{{ t.titre }}</label><span class="ad-niveau {{ t.niveau }}">Risque {{ NIVEAUX[t.niveau][0]|lower }}</span>
+            <div class="ad-test-desc">{{ t.description }}</div>
+            {% if manque %}<div class="ad-test-manque"><i class="fas fa-circle-info me-1"></i>Non applicable pour l’instant — données à importer : {{ manque|join(' ; ') }}.</div>
+            {% else %}<div class="ad-test-ok"><i class="fas fa-check me-1"></i>Applicable</div>{% endif %}
+            {% if t.params %}
+            <div class="ad-params">
+              {% for code, lib, defaut, aide in t.params %}
+              <div style="{{ 'flex: 1 1 100%; max-width: 560px' if defaut is string else 'width: 210px' }}">
+                <label for="p_{{ t.code }}_{{ code }}">{{ lib }}</label>
+                {% if defaut is string %}
+                  <textarea class="form-control form-control-sm" rows="{{ 3 if code == 'plafonds' else 2 }}" id="p_{{ t.code }}_{{ code }}" name="p_{{ t.code }}_{{ code }}" {{ 'disabled' if fige }} placeholder="{{ aide }}">{{ p[code] }}</textarea>
+                {% else %}
+                  <input type="text" inputmode="decimal" class="form-control form-control-sm" id="p_{{ t.code }}_{{ code }}" name="p_{{ t.code }}_{{ code }}"
+                         value="{{ '{:,.0f}'.format(p[code]).replace(',', ' ') if p[code] is number and p[code] >= 1000 else p[code] }}" {{ 'disabled' if fige }} title="{{ aide }}">
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+{% endmacro %}
+{% set prets = jeux.values()|selectattr('statut', 'equalto', 'pret')|list %}
+{% set statuts_jeu = {'pret': ('Prêt', 'success'), 'a_valider': ('Colonnes à valider', 'warning'), 'supprime': ('Fichier supprimé', 'secondary'), 'remplace': ('Remplacé', 'secondary')} %}
+<div class="container" style="max-width: 1180px;">
+  {% call pg.entete('Analyse de données', 'fa-magnifying-glass-chart', an.reference ~ ' · ' ~ an.titre ~ ' — mission ' ~ audit.reference, retour=url_for('detail_audit', id=audit.id), libelle_retour="Fiche de l'audit") %}
+    {% if an.resultats %}<a class="btn btn-sm btn-outline-success" href="{{ url_for('analyse_donnees.export', analyse_id=an.id) }}"><i class="fas fa-file-excel me-1"></i>Exporter les résultats</a>{% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_donnees.liste', audit_id=audit.id, liste=1) }}"><i class="fas fa-layer-group me-1"></i>Analyses de la mission</a>
+    {% if analyse_sources_visible is defined and analyse_sources_visible() %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_sources.sources') }}"><i class="fas fa-plug me-1"></i>Sources de données</a>{% endif %}
+  {% endcall %}
+
+  {% if fige %}<div class="alert alert-secondary small"><i class="fas fa-lock me-2"></i>Le rapport définitif est émis : le dossier est figé, l’analyse est en lecture seule.</div>{% endif %}
+
+  <nav class="ad-etapes" aria-label="Étapes de l’analyse">
+    <a href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='donnees') }}" class="{{ 'actif' if etape == 'donnees' else 'fait' if prets }}" {% if etape == 'donnees' %}aria-current="step"{% endif %}>
+      <span class="ad-n">{% if prets and etape != 'donnees' %}<i class="fas fa-check"></i>{% else %}1{% endif %}</span>
+      <span><strong>Données</strong><small>{{ prets|length }} fichier(s) prêt(s)</small></span></a>
+    <a href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='tests') }}" class="{{ 'actif' if etape == 'tests' else 'fait' if an.resultats }}" {% if etape == 'tests' %}aria-current="step"{% endif %}>
+      <span class="ad-n">{% if an.resultats and etape != 'tests' %}<i class="fas fa-check"></i>{% else %}2{% endif %}</span>
+      <span><strong>Tests</strong><small>{{ (an.tests_choisis or [])|length }} test(s) choisi(s) sur {{ TESTS|length }}</small></span></a>
+    <a href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='resultats') }}" class="{{ 'actif' if etape == 'resultats' }}" {% if etape == 'resultats' %}aria-current="step"{% endif %}>
+      <span class="ad-n">3</span>
+      <span><strong>Résultats</strong><small>{% if an.execution %}Exécutés le {{ an.execution.le[8:10] }}/{{ an.execution.le[5:7] }}/{{ an.execution.le[:4] }}{% else %}Pas encore exécutés{% endif %}</small></span></a>
+  </nav>
+
+{# ================================================================== 1. DONNÉES #}
+{% if etape == 'donnees' %}
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <p class="pg-second mb-0" style="max-width: 720px;">Importez les extractions du logiciel comptable ou de l’ERP (Excel .xlsx ou CSV, 15 Mo au plus par fichier).
+      Plus vous importez de fichiers, plus il y a de tests applicables. Le fichier d’origine reçoit une empreinte SHA-256 : elle prouve que les données analysées n’ont pas été modifiées.</p>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analyse_donnees.modele', type_jeu='tous') }}"><i class="fas fa-download me-1"></i>Modèles de fichiers</a>
+  </div>
+  {% for cyc, cyc_lib, cyc_jeux in CYCLES %}
+  <h2 class="ad-cycle">{{ cyc_lib }}</h2>
+  <div class="ad-jeux">
+  {% for t in cyc_jeux %}
+    {% set info = JEUX[t] %}{% set j = jeux.get(t) %}
+    {% set st = statuts_jeu.get(j.statut) if j else none %}
+    <section class="ad-jeu {{ j.statut if j }}" id="jeu-{{ t }}" aria-labelledby="titre-{{ t }}">
+      <h3 id="titre-{{ t }}"><i class="fas {{ info.icone }}"></i>{{ info.libelle }}
+        {% if st %}<span class="badge text-bg-{{ st[1] }} ms-auto" style="font-weight: 600;">{{ st[0] }}</span>{% else %}<span class="badge text-bg-light text-secondary ms-auto">Non importé</span>{% endif %}</h3>
+      <p class="ad-aide">{{ info.aide }}</p>
+      {% if j and j.statut in ('pret', 'a_valider') %}
+        {% set q = j.qualite or {} %}
+        <dl>
+          <dt>Fichier</dt><dd>{{ j.nom_fichier }}{% if j.feuille %} <span class="pg-second">· feuille « {{ j.feuille }} »</span>{% endif %}</dd>
+          <dt>Lignes</dt><dd>{{ j.nb_lignes }}</dd>
+          {% if q.periode %}<dt>Période</dt><dd>{{ q.periode[0][8:10] }}/{{ q.periode[0][5:7] }}/{{ q.periode[0][:4] }} – {{ q.periode[1][8:10] }}/{{ q.periode[1][5:7] }}/{{ q.periode[1][:4] }}</dd>{% endif %}
+          {% if q.total_credit is defined %}<dt>Débit</dt><dd>{{ fr(q.total, an.devise) }}</dd><dt>Crédit</dt><dd>{{ fr(q.total_credit, an.devise) }}</dd>
+          {% elif q.total is defined %}<dt>Total</dt><dd title="À rapprocher de la comptabilité">{{ fr(q.total, an.devise) }}</dd>{% endif %}
+          <dt>Empreinte</dt><dd class="ad-empreinte" title="SHA-256 du fichier d’origine : {{ j.empreinte }}">{{ j.empreinte[:20] }}…</dd>
+          <dt>Importé</dt><dd>{{ pg.date(j.importe_le, True) }} · {{ nom(j.importe_par) }}</dd>
+        </dl>
+        {% if q.avertissements %}
+        <ul class="ad-vigilance">{% for w in q.avertissements[:4] %}<li>{{ w }}</li>{% endfor %}</ul>
+        {% endif %}
+      {% elif j %}
+        <p class="pg-second mb-0">Dernier fichier : {{ j.nom_fichier }} ({{ j.nb_lignes }} lignes, empreinte {{ j.empreinte[:12] }}…) — contenu supprimé{% if j.supprime_le %} le {{ pg.date(j.supprime_le) }}{% endif %}.</p>
+      {% endif %}
+      {% if not fige %}
+      <div class="ad-actions">
+        {% if j and j.statut == 'a_valider' %}
+          <a class="btn btn-sm btn-warning" href="{{ url_for('analyse_donnees.colonnes', analyse_id=an.id, type_jeu=t) }}"><i class="fas fa-table-columns me-1"></i>Valider les colonnes</a>
+        {% elif j and j.statut == 'pret' %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_donnees.colonnes', analyse_id=an.id, type_jeu=t) }}"><i class="fas fa-table-columns me-1"></i>Colonnes et qualité</a>
+        {% endif %}
+        <form method="POST" enctype="multipart/form-data" action="{{ url_for('analyse_donnees.importer', analyse_id=an.id, type_jeu=t) }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="btn btn-sm {{ 'btn-outline-primary' if j and j.statut in ('pret', 'a_valider') else 'btn-primary' }} mb-0">
+            <i class="fas fa-upload me-1"></i>{{ 'Remplacer' if j and j.statut in ('pret', 'a_valider') else 'Importer' }}
+            <input type="file" name="fichier" accept=".xlsx,.xlsm,.csv,.txt" class="d-none" onchange="this.form.submit()" aria-label="Fichier {{ info.libelle }}">
+          </label>
+        </form>
+        <a class="btn btn-sm btn-link px-1" href="{{ url_for('analyse_donnees.modele', type_jeu=t) }}">Modèle</a>
+        {% set srcs = analyse_sources_pour(audit.client_id, t) if analyse_sources_pour is defined else [] %}
+        {% if srcs %}
+        <details class="w-100 ad-source"><summary class="small">Lire depuis une source</summary>
+          <form method="POST" action="{{ url_for('analyse_sources.lire_dans_analyse', analyse_id=an.id, type_jeu=t) }}" class="row g-2 mt-1 ad-lire">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-12"><select name="source_id" class="form-select form-select-sm" aria-label="Source">{% for s in srcs %}<option value="{{ s.id }}">{{ s.nom }}</option>{% endfor %}</select></div>
+            <div class="col-6"><input type="date" name="debut" class="form-control form-control-sm" aria-label="Début de la période" title="Début de la période"></div>
+            <div class="col-6"><input type="date" name="fin" class="form-control form-control-sm" aria-label="Fin de la période" title="Fin de la période"></div>
+            <div class="col-12"><button class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-plug me-1"></i>Lire les données</button></div>
+          </form>
+        </details>
+        {% endif %}
+        {% if j and j.statut in ('pret', 'a_valider') %}
+        <form method="POST" action="{{ url_for('analyse_donnees.supprimer_jeu', analyse_id=an.id, type_jeu=t) }}" class="d-inline ms-auto"
+              onsubmit="return confirm('Supprimer ce fichier ? Les résultats déjà obtenus restent dans l’analyse.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-link text-danger px-1" aria-label="Supprimer le fichier {{ info.libelle }}"><i class="fas fa-trash-can"></i></button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+  {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="row g-3 mt-1">
+    <div class="col-lg-7">
+    {% call pg.carte('Sécurité des fichiers') %}
+      <ul class="small mb-0 ps-3">
+        <li>{% if chiffrement %}Les fichiers sont <strong>chiffrés</strong> sur le serveur.{% else %}<span class="text-danger-emphasis">Chiffrement inactif : la clé EGALYX_CLE_CHIFFREMENT n’est pas définie sur le serveur.</span>{% endif %}</li>
+        <li>Accès réservé à l’équipe de la mission et aux gestionnaires de l’audit ; chaque import, exécution et export est journalisé.</li>
+        <li>Les fichiers sont supprimés {{ conservation }} jours après leur import ; les résultats, empreintes et réglages restent dans le dossier.</li>
+        <li>L’IA ne reçoit jamais les fichiers : seulement les noms de colonnes et des chiffres agrégés, masqués.</li>
+      </ul>
+    {% endcall %}
+    </div>
+    <div class="col-lg-5">
+    {% if peut_regler and not fige %}
+    {% call pg.carte('Durée de conservation') %}
+      <form method="POST" action="{{ url_for('analyse_donnees.reglages', analyse_id=an.id) }}" class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="adConservation" class="small">Supprimer les fichiers après</label>
+        <select id="adConservation" name="conservation_jours" class="form-select form-select-sm" style="width: auto;">
+          {% for n in conservations %}<option value="{{ n }}" {{ 'selected' if n == conservation }}>{{ n }} jours</option>{% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-primary">Enregistrer</button>
+      </form>
+      <p class="pg-second mb-0 mt-2">Réglage de votre organisation, appliqué aux prochains imports.</p>
+    {% endcall %}
+    {% endif %}
+    </div>
+  </div>
+  {% if prets %}
+  <div class="ad-barre"><a class="btn btn-primary" href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='tests') }}">Choisir les tests<i class="fas fa-arrow-right ms-2"></i></a>
+    <span class="pg-second">{{ prets|length }} fichier(s) prêt(s).</span></div>
+  {% endif %}
+
+{# ================================================================== 2. TESTS #}
+{% elif etape == 'tests' %}
+  {% if not prets %}
+    {% call pg.carte() %}{{ pg.vide('Importez d’abord au moins un fichier et validez ses colonnes.', 'fa-file-import') }}
+      <div class="text-center"><a class="btn btn-primary btn-sm" href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='donnees') }}">Importer des données</a></div>{% endcall %}
+  {% else %}
+  {% set nb_app = applicables.values()|select('equalto', [])|list|length %}
+  <form method="POST" action="{{ url_for('analyse_donnees.executer', analyse_id=an.id) }}" id="adTests">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Période analysée') %}
+      <div class="ad-cloture">
+        <label for="adCloture" class="fw-semibold small mb-0">Date de clôture de la période</label>
+        <input type="text" id="adCloture" name="cloture" class="form-control form-control-sm" style="width: 140px;" placeholder="jj/mm/aaaa"
+               value="{{ cloture.strftime('%d/%m/%Y') if cloture else '' }}" {{ 'disabled' if fige }} inputmode="numeric">
+        <span class="pg-second">{% if cloture and cloture_auto %}Proposée d’après les dates des données : vérifiez-la.{% else %}Sert aux tests de fin de période (écritures tardives, contre-passations, avoirs, séparation des exercices).{% endif %}</span>
+      </div>
+    {% endcall %}
+    {% call pg.carte('Bibliothèque de tests', aide=nb_app ~ ' test(s) applicable(s) avec les données importées') %}
+      <div class="d-flex gap-2 mb-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-cocher="applicables">Cocher les tests applicables</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-cocher="aucun">Tout décocher</button>
+      </div>
+      {% set app_codes = applicables|dictsort|selectattr('1', 'equalto', [])|map(attribute='0')|list %}
+      {% for dom in DOMAINES %}{% set lst = TESTS|selectattr('domaine', 'equalto', dom)|selectattr('code', 'in', app_codes)|list %}
+        {% if lst %}<div class="ad-domaine">{{ dom }}</div>{% for t in lst %}{{ ligne_test(t) }}{% endfor %}{% endif %}
+      {% endfor %}
+      {% set na = TESTS|rejectattr('code', 'in', app_codes)|list %}
+      {% if na %}
+      <details class="mt-3"><summary class="small fw-semibold">{{ na|length }} test(s) non applicable(s) avec les données importées — voir ce qu’il faudrait importer</summary>
+        {% for dom in DOMAINES %}{% set lst = na|selectattr('domaine', 'equalto', dom)|list %}
+          {% if lst %}<div class="ad-domaine">{{ dom }}</div>{% for t in lst %}{{ ligne_test(t) }}{% endfor %}{% endif %}
+        {% endfor %}
+      </details>
+      {% endif %}
+    {% endcall %}
+    {% if not fige %}
+    <div class="ad-barre">
+      <button class="btn btn-primary" id="adLancer"><span class="ad-l"><i class="fas fa-play me-1"></i>Lancer les tests cochés</span>
+        <span class="ad-a d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Analyse en cours…</span></button>
+      <span class="pg-second">Résultat reproductible : mêmes fichiers et mêmes réglages donnent le même résultat. {% if an.resultats %}Les résultats précédents seront remplacés.{% endif %}</span>
+    </div>
+    {% endif %}
+  </form>
+  {% endif %}
+
+{# ================================================================== 3. RÉSULTATS #}
+{% else %}
+  {% if not an.resultats %}
+    {% call pg.carte() %}{{ pg.vide('Les tests n’ont pas encore été lancés.', 'fa-flask') }}
+      <div class="text-center"><a class="btn btn-primary btn-sm" href="{{ url_for('analyse_donnees.page', analyse_id=an.id, etape='tests') }}">Choisir et lancer les tests</a></div>{% endcall %}
+  {% else %}
+  {% set avec = resultats|selectattr('statut', 'equalto', 'anomalies')|list %}
+  <div class="pg-kpis">
+    {{ pg.kpi('Tests exécutés', resultats|rejectattr('statut', 'equalto', 'non_applicable')|list|length) }}
+    {{ pg.kpi('Tests avec anomalies', avec|length, '#a51d2d' if avec else none) }}
+    {{ pg.kpi('Cas à examiner', avec|sum(attribute='cas')) }}
+    {{ pg.kpi('Montant concerné', fr(avec|rejectattr('code', 'in', ['CONCENTRATION', 'BENFORD', 'GL_BENFORD', 'STAT_MONTANTS', 'STAT_MENSUEL'])|sum(attribute='montant'), an.devise)) }}
+  </div>
+  <p class="pg-second" style="margin-top: -.4rem;">Le montant concerné exclut les tests statistiques (Benford, concentration, montants et mois atypiques). Une anomalie est un cas à examiner avec les pièces, pas une conclusion.</p>
+
+  {% call pg.carte('Synthèse', aide='À relire : elle ne figure pas dans le rapport') %}
+    <div id="adSynthese">
+      {% if an.synthese %}
+        <span class="ad-origine {{ an.synthese.origine }}">{{ 'Rédigée par l’IA à partir des chiffres agrégés' if an.synthese.origine == 'ia' else 'Synthèse automatique (sans IA)' }}</span>
+        <div class="ad-synthese mt-2">{{ an.synthese.synthese }}</div>
+        {% if an.synthese.priorites %}<h3 class="h6 mt-3 mb-1">Priorités d’examen</h3><ol class="small mb-0">{% for x in an.synthese.priorites %}<li>{{ x }}</li>{% endfor %}</ol>{% endif %}
+        {% if an.synthese.tests_complementaires %}<h3 class="h6 mt-3 mb-1">Vérifications complémentaires</h3><ul class="small mb-0">{% for x in an.synthese.tests_complementaires %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+      {% else %}
+        <p class="pg-second mb-0">{{ 'L’IA résume les résultats et propose les priorités d’examen. Elle ne reçoit que les chiffres agrégés et quelques exemples, masqués.' if ia_ok else 'Résumé des résultats par ordre de priorité (sans IA).' }}</p>
+      {% endif %}
+    </div>
+    {% if not fige %}
+    <button type="button" class="btn btn-sm btn-outline-primary mt-3" id="adSyntheseBtn">
+      <span class="ad-l"><i class="fas {{ 'fa-wand-magic-sparkles' if ia_ok else 'fa-list-check' }} me-1"></i>{{ ('Refaire la synthèse' if an.synthese else 'Rédiger la synthèse') ~ (' avec l’IA' if ia_ok else '') }}</span>
+      <span class="ad-a d-none"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Rédaction…</span>
+    </button>
+    {% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Résultats par ordre de priorité', aide='Cliquez sur un test pour examiner ses anomalies') %}
+    <div class="table-responsive">
+    <table class="pg-table ad-res">
+      <thead><tr><th>Test</th><th>Risque</th><th class="pg-num">Population</th><th class="pg-num">Cas</th><th class="pg-num">Lignes</th><th class="pg-num">Montant</th><th>Résultat</th><th></th></tr></thead>
+      <tbody>
+      {% for r in resultats %}
+        {% set lien = (an.liens or {}).get(r.code, {}) %}
+        <tr class="{{ 'na' if r.statut in ('non_applicable', 'erreur') }}">
+          <td>{% if r.statut == 'anomalies' %}<a href="{{ url_for('analyse_donnees.detail_test', analyse_id=an.id, code=r.code) }}" class="fw-semibold">{{ r.titre }}</a>{% else %}{{ r.titre }}{% endif %}
+            {% if r.raison %}<div class="pg-second">{{ r.raison }}</div>{% endif %}
+            {% if lien.feuille or lien.constat %}<div class="pg-second">{% if lien.feuille %}<i class="fas fa-file-lines me-1"></i>{{ lien.feuille }} {% endif %}{% if lien.constat %}<i class="fas fa-flag ms-2 me-1"></i>{{ lien.constat }}{% endif %}</div>{% endif %}</td>
+          <td><span class="ad-niveau {{ r.niveau }} ms-0">{{ NIVEAUX[r.niveau][0] }}</span></td>
+          <td class="pg-num">{{ r.population if r.statut not in ('non_applicable', 'erreur') else '—' }}</td>
+          <td class="pg-num">{{ r.cas if r.statut == 'anomalies' else '—' }}</td>
+          <td class="pg-num">{{ r.nb if r.statut == 'anomalies' else '—' }}</td>
+          <td class="pg-num">{{ fr(r.montant, '') if r.montant and r.code not in ('CONCENTRATION', 'BENFORD', 'GL_BENFORD') else '—' }}</td>
+          <td class="ad-statut">{% if r.statut == 'anomalies' %}<span class="text-danger-emphasis"><i class="fas fa-triangle-exclamation me-1"></i>À examiner</span>
+            {% elif r.statut == 'ok' %}<span class="text-success-emphasis"><i class="fas fa-check me-1"></i>Aucune anomalie</span>
+            {% elif r.statut == 'erreur' %}<span class="text-danger"><i class="fas fa-circle-xmark me-1"></i>Erreur</span>
+            {% else %}<span class="pg-second">Non applicable</span>{% endif %}</td>
+          <td>{% if r.statut == 'anomalies' %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('analyse_donnees.detail_test', analyse_id=an.id, code=r.code) }}" aria-label="Examiner {{ r.titre }}">Examiner</a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endcall %}
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+    {% call pg.carte('Données analysées', aide='Piste d’audit') %}
+      <table class="pg-table">
+        <thead><tr><th>Fichier</th><th class="pg-num">Lignes</th><th>Empreinte SHA-256</th></tr></thead>
+        <tbody>{% for x in an.execution.jeux %}<tr><td>{{ x.libelle }}<div class="pg-second">{{ x.fichier }}</div></td><td class="pg-num">{{ x.lignes }}</td>
+          <td class="ad-empreinte" title="{{ x.empreinte }}">{{ x.empreinte[:16] }}…</td></tr>{% endfor %}</tbody>
+      </table>
+      <p class="pg-second mb-0 mt-2">Exécuté le {{ an.execution.le[8:10] }}/{{ an.execution.le[5:7] }}/{{ an.execution.le[:4] }} à {{ an.execution.le[11:16] }} (UTC) par {{ nom(an.execution.par) }}, en {{ an.execution.duree }} s.</p>
+    {% endcall %}
+    </div>
+    <div class="col-lg-6" id="echantillon">
+    {% call pg.carte('Tirer un échantillon', aide='Pour les tests sur pièces') %}
+      {% if fige %}<p class="pg-second mb-0">Dossier figé.</p>{% elif not prets %}<p class="pg-second mb-0">Les fichiers ne sont plus disponibles : importez-les à nouveau pour tirer un échantillon.</p>{% else %}
+      <form method="POST" action="{{ url_for('analyse_donnees.echantillon', analyse_id=an.id) }}" class="row g-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-sm-6"><label class="form-label small mb-1" for="adEchJeu">Population</label>
+          <select id="adEchJeu" name="jeu" class="form-select form-select-sm">{% for t in ORDRE if jeux.get(t) and jeux[t].statut == 'pret' %}<option value="{{ t }}">{{ JEUX[t].libelle }} ({{ jeux[t].nb_lignes }})</option>{% endfor %}</select></div>
+        <div class="col-sm-3"><label class="form-label small mb-1" for="adEchTaille">Taille</label>
+          <input id="adEchTaille" type="number" name="taille" min="1" max="500" value="25" class="form-control form-control-sm"></div>
+        <div class="col-sm-3"><label class="form-label small mb-1" for="adEchGraine">Graine</label>
+          <input id="adEchGraine" type="text" inputmode="numeric" name="graine" class="form-control form-control-sm" placeholder="auto" title="Laissez vide : une graine est tirée et conservée. Indiquez-la pour refaire un tirage à l’identique."></div>
+        <div class="col-sm-8"><select name="methode" class="form-select form-select-sm" aria-label="Méthode de sélection">
+          <option value="aleatoire">Aléatoire (reproductible)</option><option value="montants">Les plus gros montants</option></select></div>
+        <div class="col-sm-4"><button class="btn btn-sm btn-primary w-100">Créer la feuille</button></div>
+      </form>
+      <p class="pg-second mb-0 mt-2">L’échantillon est enregistré dans une nouvelle feuille de travail de la mission, avec la méthode et la graine.</p>
+      {% endif %}
+    {% endcall %}
+    </div>
+  </div>
+  {% if not fige %}
+  <form method="POST" action="{{ url_for('analyse_donnees.supprimer', analyse_id=an.id) }}" class="text-end mb-4" onsubmit="return confirm('Supprimer cette analyse, ses fichiers et ses résultats ? Les feuilles de travail et constats déjà créés sont conservés.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-link text-danger"><i class="fas fa-trash-can me-1"></i>Supprimer l’analyse</button>
+  </form>
+  {% endif %}
+  {% endif %}
+{% endif %}
+</div>
+<script>
+(function () {
+  var CSRF = function () { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ''; };
+  document.querySelectorAll('[data-cocher]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var tous = b.dataset.cocher === 'applicables';
+      document.querySelectorAll('.ad-test').forEach(function (t) {
+        var c = t.querySelector('input[type=checkbox]');
+        if (!c.disabled) c.checked = tous && t.dataset.applicable === '1';
+      });
+    });
+  });
+  var f = document.getElementById('adTests');
+  if (f) f.addEventListener('submit', function () {
+    var b = document.getElementById('adLancer');
+    if (b) { b.disabled = true; b.querySelector('.ad-l').classList.add('d-none'); b.querySelector('.ad-a').classList.remove('d-none'); }
+  });
+  var s = document.getElementById('adSyntheseBtn');
+  if (s) s.addEventListener('click', function () {
+    s.disabled = true; s.querySelector('.ad-l').classList.add('d-none'); s.querySelector('.ad-a').classList.remove('d-none');
+    fetch('{{ url_for('analyse_donnees.synthese', analyse_id=an.id) }}', { method: 'POST', headers: { 'X-CSRFToken': CSRF() }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d.success) { window.location.reload(); } else { alert(d.error || 'Synthèse impossible.'); s.disabled = false; s.querySelector('.ad-l').classList.remove('d-none'); s.querySelector('.ad-a').classList.add('d-none'); } })
+      .catch(function () { alert('Connexion interrompue.'); s.disabled = false; s.querySelector('.ad-l').classList.remove('d-none'); s.querySelector('.ad-a').classList.add('d-none'); });
+  });
+})();
+</script>
+{% endblock %}

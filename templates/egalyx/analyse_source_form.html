@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ c.nom }} — Source de données{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .sf-x textarea { font-family: var(--bs-font-monospace); font-size: .8rem; }
+  .sf-x label { font-weight: 600; font-size: .86rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 980px;">
+  {% call pg.entete((s.nom if s else 'Nouvelle source') ~ ' — ' ~ c.nom, 'fa-plug', c.famille ~ ' · ' ~ c.aide, retour=url_for('analyse_sources.sources'), libelle_retour='Sources') %}{% endcall %}
+  <form method="POST" action="{{ url_for('analyse_sources.source_form', sid=s.id) if s else url_for('analyse_sources.source_form') }}" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="connecteur" value="{{ c.code }}">
+    {% call pg.carte('Connexion') %}
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label" for="sf_nom">Nom de la source</label>
+          <input class="form-control" id="sf_nom" name="nom" required maxlength="150" value="{{ s.nom if s else c.nom }}"></div>
+        {% for ch in c.champs %}
+        <div class="{{ 'col-12' if ch.type == 'long' else 'col-md-6' }}">
+          <label class="form-label" for="f_{{ ch.code }}">{{ ch.libelle }}</label>
+          {% if ch.secret %}
+            {% if ch.type == 'long' %}<textarea class="form-control" rows="4" id="f_{{ ch.code }}" name="f_{{ ch.code }}" placeholder="{{ '••••• enregistré (laisser vide pour garder)' if ch.code in secrets else '' }}"></textarea>
+            {% else %}<input type="password" class="form-control" id="f_{{ ch.code }}" name="f_{{ ch.code }}" autocomplete="new-password" placeholder="{{ '••••• enregistré (laisser vide pour garder)' if ch.code in secrets else '' }}">{% endif %}
+            {% if ch.code in secrets %}<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="effacer_{{ ch.code }}" id="ef_{{ ch.code }}" value="1"><label class="form-check-label small" for="ef_{{ ch.code }}">Effacer la valeur enregistrée</label></div>{% endif %}
+          {% else %}
+            <input class="form-control" id="f_{{ ch.code }}" name="f_{{ ch.code }}" value="{{ p.get(ch.code) or ch.defaut }}" {{ 'inputmode=numeric' if ch.type == 'nombre' }}>
+          {% endif %}
+          {% if ch.aide %}<div class="form-text">{{ ch.aide }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <p class="pg-second mb-0 mt-3"><i class="fas fa-lock me-1"></i>Les secrets sont chiffrés et ne sont jamais réaffichés.</p>
+    {% endcall %}
+
+    {% if c.extraction != 'api' %}
+    {% call pg.carte('Données à lire', aide={'requete': 'Une requête SELECT par type de données', 'chemin': 'Un chemin de fichier par type de données', 'url': 'Une adresse par type de données', 'fichier': 'Un fichier Google Drive par type de données'}[c.extraction]) %}
+      {% if c.extraction == 'requete' %}
+      <p class="small">Nommez les colonnes comme dans les modèles de fichiers (« N° facture », « Montant TTC »…) : la correspondance sera automatique.
+        Pour la période, utilisez <code>:debut</code> et <code>:fin</code>.
+        {% if modeles %}<button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="sfModeles">Remplir avec les modèles {{ modeles.libelle }}</button>{% endif %}
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="sfVues">Remplir avec des vues préparées par la DSI</button></p>
+      {% elif c.extraction == 'chemin' %}
+      <p class="small">Exemples : <code>/exports/fournisseurs.csv</code>, <code>Audit/{AAAA}/paiements_{MM}.xlsx</code>, <code>/depot/grand_livre_*.csv</code> (le plus récent).</p>
+      {% elif c.extraction == 'fichier' %}
+      <p class="small">Collez le lien de partage du fichier ou son identifiant.</p>
+      {% endif %}
+      <div class="row g-3 sf-x">
+      {% for j in ORDRE %}
+        <div class="col-12"><label for="x_{{ j }}">{{ JEUX[j].libelle }}</label>
+          {% set v = ((p.get('extractions') or {}).get(j) or {}).values()|first %}
+          {% if c.extraction == 'requete' %}<textarea class="form-control" rows="3" id="x_{{ j }}" name="x_{{ j }}" data-jeu="{{ j }}">{{ v or '' }}</textarea>
+          {% else %}<input class="form-control" id="x_{{ j }}" name="x_{{ j }}" value="{{ v or '' }}">{% endif %}
+        </div>
+      {% endfor %}
+      </div>
+    {% endcall %}
+    {% else %}
+    {% call pg.carte('Données lues') %}
+      <p class="small mb-0">{% for j in ORDRE %}{{ JEUX[j].libelle }}{{ ', ' if not loop.last else '.' }}{% endfor %}
+        Les colonnes arrivent déjà rangées ; vous choisissez la période dans chaque analyse.</p>
+    {% endcall %}
+    {% endif %}
+
+    <div class="d-flex gap-2 mb-4">
+      <button class="btn btn-primary" name="action" value="tester"><i class="fas fa-plug-circle-check me-1"></i>Enregistrer et tester</button>
+      <button class="btn btn-outline-primary" name="action" value="enregistrer">Enregistrer</button>
+    </div>
+  </form>
+</div>
+{% if c.extraction == 'requete' %}
+<script>
+(function () {
+  var M = {{ (modeles.requetes if modeles else {})|tojson }}, V = {{ vues.requetes|tojson }};
+  function remplir(src) { document.querySelectorAll('textarea[data-jeu]').forEach(function (t) { if (!t.value.trim() && src[t.dataset.jeu]) t.value = src[t.dataset.jeu]; }); }
+  var b = document.getElementById('sfModeles'); if (b) b.addEventListener('click', function () { remplir(M); });
+  var v = document.getElementById('sfVues'); if (v) v.addEventListener('click', function () { remplir(V); });
+})();
+</script>
+{% endif %}
+{% endblock %}

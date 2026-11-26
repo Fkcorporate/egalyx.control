@@ -9,6 +9,8 @@ from types import SimpleNamespace as NS
 os.environ['EGALYX_COLLECTE_AUTO'] = '0'
 os.environ['OPENAI_API_KEY'] = 'sk-recette' + 'x' * 40
 os.environ['MISTRAL_API_KEY'] = 'mistral-recette-' + 'y' * 30
+os.environ['ANTHROPIC_API_KEY'] = 'sk-ant-recette-' + 'z' * 30
+os.environ['DEEPSEEK_API_KEY'] = 'sk-deepseek-' + 'w' * 30
 import socle
 from socle import Muet, appel
 os.environ['OPENAI_API_KEY'] = 'sk-recette' + 'x' * 40     # socle retire la clé : on remet une clé de test (faux fournisseur)
@@ -131,6 +133,31 @@ with A.app.test_request_context():
         model='gpt-4o-mini', messages=[{'role': 'user', 'content': 'Analyse : M. Traoré a validé le dossier.'}])
     verif('ancienne fonction (client openai direct) : passe aussi par Mistral, masquée', APPELS and 'api.eu.mistral.ai' in APPELS[-1]['base']
           and 'Traoré' not in APPELS[-1]['texte'])
+print('--- Anthropic (Claude) et DeepSeek')
+CORPS = []
+def faux_anthropic(corps):
+    CORPS.append(corps)
+    return {'id': 'm1', 'model': corps['model'], 'stop_reason': 'end_turn', 'usage': {'input_tokens': 1, 'output_tokens': 1},
+            'content': [{'type': 'thinking', 'thinking': ''}, {'type': 'text', 'text': '```json\n' + REPONSE['contenu'] + '\n```'}]}
+P._etat['anthropic'] = faux_anthropic
+appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton(sa, '/super-admin/ia/'), 'action': 'fournisseur', 'fournisseur': 'anthropic'})
+APPELS.clear()
+r = proposer_constat(gest)
+j = r.get_json() or {}
+co = CORPS[-1] if CORPS else {}
+verif('Claude : constat proposé par l’IA (JSON extrait du bloc de code)', j.get('origine') == 'ia' and 'Traoré' in (j.get('constat') or {}).get('fait', ''), j.get('origine'))
+verif('… API native d’Anthropic (aucun appel OpenAI), modèle Claude, consigne JSON, marge de réflexion', not APPELS and co.get('model') == 'claude-sonnet-5-5'
+      and 'JSON' in co.get('system', '') and co.get('max_tokens', 0) >= 1200 + P.ANTHROPIC_MARGE_REFLEXION, co.get('model'))
+verif('… données masquées avant l’envoi à Claude', co and 'Traoré' not in json.dumps(co, ensure_ascii=False) and '[PERSONNE_' in json.dumps(co, ensure_ascii=False))
+r = appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton(sa, '/super-admin/ia/'), 'action': 'fournisseur', 'fournisseur': 'deepseek'})
+APPELS.clear()
+proposer_constat(gest)
+verif('DeepSeek choisi : envoi vers api.deepseek.com, modèle deepseek-flash', APPELS and 'api.deepseek.com' in APPELS[-1]['base']
+      and APPELS[-1]['kw'].get('model') == 'deepseek-flash' and APPELS[-1]['cle'] == os.environ['DEEPSEEK_API_KEY'], APPELS[-1]['base'] if APPELS else None)
+r = appel(sa, 'get', '/super-admin/ia/')
+verif('page du super admin : 4 fournisseurs, avertissement DeepSeek (données en Chine)', all(x.encode() in r.data for x in (
+    'OpenAI', 'Anthropic (Claude)', 'Mistral AI', 'DeepSeek', 'stocke les données en Chine')))
+appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton(sa, '/super-admin/ia/'), 'action': 'fournisseur', 'fournisseur': 'mistral'})
 appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton(sa, '/super-admin/ia/'), 'action': 'masquage', 'ia_masquage': '0'})
 APPELS.clear(); proposer_constat(gest)
 verif('masquage coupé par le super admin : données envoyées telles quelles', APPELS and 'Traoré' in APPELS[-1]['texte'])

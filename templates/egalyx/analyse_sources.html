@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Sources de données — Analyse de données{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .as-familles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+  .as-famille h3 { font-size: .9rem; font-weight: 650; margin: 0 0 .5rem; }
+  .as-choix { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .as-choix a { border: 1px solid var(--bs-border-color); border-radius: 8px; padding: .35rem .65rem; font-size: .84rem; text-decoration: none; color: var(--bs-body-color); background: var(--bs-body-bg); }
+  .as-choix a:hover, .as-choix a:focus-visible { border-color: var(--bs-primary); color: var(--bs-primary); }
+  .as-etat { font-size: .8rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {% call pg.entete('Sources de données', 'fa-plug', 'Connexions à vos systèmes pour lire les données d’audit sans export manuel') %}
+    {% if analyse_programmes_visible is defined and analyse_programmes_visible() %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('analyse_sources.programmes') }}"><i class="fas fa-clock-rotate-left me-1"></i>Analyses programmées</a>{% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Vos sources') %}
+    {% if liste %}
+    <table class="pg-table">
+      <thead><tr><th>Nom</th><th>Type</th><th>Données</th><th>Dernier test</th><th></th></tr></thead>
+      <tbody>
+      {% for s in liste %}{% set c = PAR_CODE.get(s.connecteur) %}
+        <tr>
+          <td class="fw-semibold">{{ s.nom }}{% if not s.actif %} <span class="badge text-bg-secondary">désactivée</span>{% endif %}</td>
+          <td>{{ c.nom if c else s.connecteur }}</td>
+          <td class="pg-second">{% set lj = c.jeux if c and c.extraction == 'api' else (((s.parametres or {}).get('extractions') or {}).keys()|list) %}{% for j in lj %}{{ JEUX[j].libelle }}{{ ', ' if not loop.last }}{% else %}À paramétrer{% endfor %}</td>
+          <td class="as-etat">{% if s.dernier_test_le %}{% if s.dernier_test_ok %}<span class="text-success-emphasis"><i class="fas fa-check me-1"></i>{% else %}<span class="text-danger-emphasis"><i class="fas fa-triangle-exclamation me-1"></i>{% endif %}{{ pg.date(s.dernier_test_le, True) }}</span>
+            <div class="pg-second">{{ s.dernier_message }}</div>{% else %}<span class="pg-second">Jamais testée</span>{% endif %}</td>
+          <td class="text-nowrap">
+            <form method="POST" action="{{ url_for('analyse_sources.source_tester', sid=s.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-primary">Tester</button></form>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analyse_sources.source_form', sid=s.id) }}">Modifier</a>
+            <form method="POST" action="{{ url_for('analyse_sources.source_supprimer', sid=s.id) }}" class="d-inline" onsubmit="return confirm('Supprimer cette source ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger" aria-label="Supprimer {{ s.nom }}"><i class="fas fa-trash-can"></i></button></form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}{{ pg.vide('Aucune source connectée. Choisissez ci-dessous le type de votre système.', 'fa-plug') }}{% endif %}
+  {% endcall %}
+
+  {% call pg.carte('Connecter une source', aide='Lecture seule, identifiants chiffrés') %}
+    <div class="as-familles">
+      {% for fam in FAMILLES %}
+      <div class="as-famille"><h3>{{ fam }}</h3>
+        <div class="as-choix">{% for c in CONNECTEURS if c.famille == fam %}<a href="{{ url_for('analyse_sources.source_form', connecteur=c.code) }}">{{ c.nom }}</a>{% endfor %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <ul class="small mt-3 mb-0 pg-second">
+      <li>Bases de données, SFTP et liens https : le serveur doit être joignable depuis Internet (pare-feu limité aux adresses du serveur Egalyx){% if prive %} — réseau privé autorisé sur cette installation{% endif %}. Utilisez un compte <strong>en lecture seule</strong>.</li>
+      <li>Systèmes bancaires (Temenos T24, Oracle Flexcube, Sopra Amplitude…) et ERP sans interface : passez par la base de données, avec des vues préparées par votre DSI.</li>
+      <li>Sage 100 / Saari : base SQL Server, modèles de requêtes fournis. SAP, NetSuite et Sage Cloud : utilisez pour l’instant un export déposé (SFTP, SharePoint, lien https).</li>
+    </ul>
+  {% endcall %}
+</div>
+{% endblock %}

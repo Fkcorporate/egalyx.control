@@ -1,7 +1,91 @@
-MISE À JOUR EGALYX — 25/11/2026 (paquet cumulatif)
+MISE À JOUR EGALYX — 26/11/2026 (paquet cumulatif)
 ===================================================
-Contient tout le travail du 25/11 : il remplace les paquets précédents de la journée
+Contient tout le travail des 25 et 26/11 : il remplace les paquets précédents
 (s'ils sont déjà installés, ce paquet passe par-dessus sans rien casser).
+
+
+0. ANALYSE DE DONNÉES D'AUDIT (lots 1 à 4 : achats, comptabilité, ventes, connecteurs, audit continu, paie, SI, banque) — NOUVEAU
+------------------------------------------------------------------------------------------------------------------------
+Activation : Super admin > fiche du client > Modules > cocher « Analyse de données » (« sur activation ») > Appliquer.
+Fermé pour tous les clients tant qu'il n'est pas coché.
+Accès : équipe de la mission et gestionnaires de l'audit, avec la permission « Analyse de données » ou « Gérer les
+audits » (les administrateurs de l'organisation l'ont).
+
+Pour l'auditeur : fiche de l'audit > « Analyse de données », en 3 étapes.
+  1. Données : import Excel (.xlsx), CSV ou FEC, 15 Mo au plus par fichier, de 9 types en 3 cycles :
+     - achats : fournisseurs, factures fournisseurs, paiements, bons de commande, salariés ;
+     - comptabilité : grand livre (export SYSCOHADA, ou fichier des écritures comptables FEC reconnu automatiquement) ;
+     - ventes : factures clients et avoirs, clients (statut, limite de crédit), encaissements. Modèles de fichiers téléchargeables. Correspondance des colonnes proposée
+     automatiquement (ou par l'IA, qui ne voit que les NOMS des colonnes). Contrôle de qualité : lignes, total à
+     rapprocher de la comptabilité, période, valeurs illisibles (signalées avec la ligne, jamais devinées), doublons.
+     Empreinte SHA-256 de chaque fichier d'origine (preuve d'intégrité).
+  2. Tests : 40 tests réglables. Date de clôture de la période proposée d'après les données, à confirmer.
+     Comptabilité (11) : écritures déséquilibrées, en double, sans pièce ou libellé vague, saisies la nuit / le week-end /
+     un jour férié, passées après la clôture, manuelles sur comptes sensibles (46, 47, 52, 57, 58 par défaut),
+     comptes d'attente non soldés (avec ancienneté), saisies par des personnes non habilitées ou des comptes génériques,
+     montants ronds, Benford, écritures de fin de période contre-passées.
+     Ventes (8) : trous et doublons de numérotation, avoirs après la clôture, avoirs sans origine ou excessifs, remises hors
+     politique, ventes à clients bloqués ou inconnus, dépassement de limite de crédit, ventes de fin de période annulées
+     après la clôture (cut-off), encaissements non rattachés.
+     Achats (21) : factures en double, numéro en double, paiements en double, paiements sans facture,
+     trop-payés, factures sans bon de commande, commandes postérieures à la facture, fractionnement sous le seuil,
+     approbations hors délégation (plafonds par personne), séparation des tâches, RIB partagé, fournisseur lié à un
+     salarié, paiement sur un autre compte, RIB modifié avant paiement, fournisseur récent payé vite, fournisseur
+     absent ou bloqué, week-end et jours fériés, montants ronds, loi de Benford, concentration, écarts de prix.
+     Un test sans les données nécessaires est « non applicable », avec ce qu'il faut importer.
+  3. Résultats : par ordre de priorité, export Excel (synthèse + une feuille par test, colonne « conclusion de
+     l'auditeur »). Pour chaque test : « Créer la feuille de travail » (test exhaustif), « Rédiger le constat »
+     (5 C pré-remplis, reformulables par l'IA), « Tirer un échantillon » (aléatoire reproductible avec graine
+     conservée, ou plus gros montants). Synthèse automatique, ou par l'IA à partir des chiffres agrégés.
+Le résultat ne dépend d'aucune IA : mêmes fichiers + mêmes réglages = même résultat.
+
+LOT 4 — PAIE, HABILITATIONS, CRÉDIT, LCB-FT, STATISTIQUE (63 tests au total)
+  Nouveaux fichiers : paie (une ligne par salarié et par mois), comptes utilisateurs d'une application (rôles, statut,
+  dernière connexion), crédits (décideur, garantie, retard, classement), opérations clients (dépôts, retraits, virements,
+  canal, pays) ; champs ajoutés aux salariés (entrée, fonction) et aux clients (pièce d'identité, expiration, adresse,
+  profession, PPE, niveau de risque, date de revue KYC). Les fichiers sont rangés en 5 cycles sur la page Données.
+  Paie (6) : salaires après le départ, salariés payés absents du personnel, double paie, compte partagé, variations
+    anormales du net, heures supplémentaires excessives.
+  Habilitations (4) : comptes actifs de partants (et utilisés après le départ), comptes génériques, comptes inutilisés,
+    cumuls de rôles incompatibles (matrice réglable « rôle A + rôle B »).
+  Crédit (5) : hors délégation, fractionnés sous la délégation, crédits au personnel, impayés non déclassés (> 90 jours),
+    crédits importants sans garantie.
+  LCB-FT (6) : KYC incomplet ou périmé (selon le niveau de risque), dépôts fractionnés sous le seuil, opérations des PPE et
+    clients à risque élevé, comptes dormants réactivés, pays à haut risque (liste à tenir à jour avec le GAFI), transit rapide.
+  Statistique (2) : montants atypiques pour un tiers, mois atypiques (méthode robuste de la médiane, sur le logarithme).
+  Les seuils réglementaires (déclaration, délégations, délais de revue) sont des réglages à adapter à chaque client.
+  Aucune nouvelle table : pas de migration pour ce lot.
+
+LOT 3 — CONNECTEURS ET AUDIT CONTINU
+  Sources de données (administrateurs de l'organisation) : bouton « Sources de données » d'une analyse.
+    - Bases de données en lecture seule (une requête SELECT par type de données, :debut / :fin pour la période) :
+      PostgreSQL, MySQL / MariaDB, SQL Server (modèles de requêtes Sage 100 fournis), Oracle (Flexcube, T24… via des vues DSI).
+    - Fichiers déposés : SFTP (empreinte du serveur vérifiée), lien https d'export, SharePoint / OneDrive, Google Drive.
+    - Logiciels de gestion (API officielles) : Odoo, Dynamics 365 Business Central, Xero, QuickBooks Online, Zoho Books.
+    Identifiants chiffrés (EGALYX_CLE_CHIFFREMENT), jamais réaffichés ; « Enregistrer et tester ».
+    Un serveur interne (base, SFTP) doit être joignable depuis Internet (pare-feu limité aux adresses de Render) ;
+    sur une installation dans le réseau du client : EGALYX_SOURCES_RESEAU_PRIVE=1.
+  Dans une analyse : carte d'un type de données > « Lire depuis une source » (période) > même suite que l'import.
+  Menu « Audit continu » : analyses programmées (source, tests, période glissante, chaque jour / semaine / mois, la nuit).
+    Les NOUVELLES anomalies deviennent des éléments « en anomalie » de la planification N2 de la période (référentiel choisi) :
+    le contrôleur examine, soumet, le validateur décide (non-conformités) ; un KRI peut recevoir le nombre, le montant ou le taux ;
+    le responsable est prévenu. Exécution automatique toutes les 15 minutes pour celles arrivées à échéance
+    (EGALYX_COLLECTE_AUTO=0 coupe, comme pour les KRI).
+  requirements.txt : ajout de PyMySQL, pymssql, oracledb, paramiko (pilotes ; Render les installe au déploiement).
+  Base : migration 0014 (tables analyses_sources, analyses_programmees, analyses_programmees_executions).
+  À valider sur un vrai compte avant mise en production : chaque logiciel de gestion (testés ici avec des réponses simulées
+  conformes à leur documentation) et les modèles de requêtes Sage 100 (les tables varient selon la version).
+
+Super admin > Intelligence artificielle : nouvel interrupteur « Analyse de données » (correspondance des colonnes,
+synthèse, rédaction du constat). Coupé : tout fonctionne quand même, sans IA.
+
+Sécurité : fichiers chiffrés sur le disque avec EGALYX_CLE_CHIFFREMENT (déjà utilisée pour les connecteurs KRI ; si
+elle n'est pas définie, la page l'indique en rouge) et supprimés après 30 à 730 jours (90 par défaut, réglable par
+l'organisation) ; les résultats et empreintes restent dans le dossier. Dossier figé après le rapport définitif.
+Stockage : dossier uploads/analyses_donnees (disque persistant Render), ou EGALYX_DOSSIER_ANALYSES.
+Base : migration 0013 (tables analyses_donnees et analyses_donnees_jeux) ; elles sont aussi créées au démarrage.
+Limite actuelle : 200 000 lignes par fichier (traitement immédiat).
+
 
 
 1. IA AU CŒUR DE L'AUDIT (étapes 1 à 3) — NOUVEAU
@@ -12,10 +96,14 @@ Super admin > Administration > Intelligence artificielle :
     « Assistant : réponses avec l’IA », « Premier jet du rapport ») ;
     (l'IA de l'assistant ne dépend plus de la variable cachée ASSISTANT_IA_EXTERNE ; ASSISTANT_IA_EXTERNE=0 la coupe encore)
   - NOUVEAU : choix du fournisseur pour TOUTES les fonctions d'IA de l'outil :
-        OpenAI (États-Unis)             variable OPENAI_API_KEY
-        Mistral AI (France, point d'accès européen api.eu.mistral.ai : traitement dans l'UE)
-                                        variable MISTRAL_API_KEY
-    (si le fournisseur choisi n'a pas de clé, l'autre est utilisé) ;
+        OpenAI (États-Unis)                    OPENAI_API_KEY      (modèle : EGALYX_IA_MODELE, défaut gpt-4o-mini)
+        Anthropic, Claude (États-Unis)         ANTHROPIC_API_KEY   (EGALYX_IA_MODELE_ANTHROPIC, défaut claude-sonnet-5-5)
+            API native de Claude ; la passerelle traduit messages, outils et réponses JSON
+        Mistral AI (France, traitement UE)     MISTRAL_API_KEY     (EGALYX_IA_MODELE_MISTRAL, défaut mistral-medium-latest)
+        DeepSeek (Chine : données stockées en Chine selon sa politique de confidentialité)
+                                               DEEPSEEK_API_KEY    (EGALYX_IA_MODELE_DEEPSEEK, défaut deepseek-flash)
+    Si le fournisseur choisi n'a pas de clé, un autre fournisseur ayant une clé est utilisé (Mistral, OpenAI, puis
+    Anthropic) — JAMAIS DeepSeek, utilisé seulement s'il est choisi explicitement ;
   - NOUVEAU : masquage des données sensibles avant chaque envoi (noms des utilisateurs, personnes citées
     avec M./Mme, nom de l'organisation, e-mails, téléphones, IBAN, numéros de compte), remis en clair au retour ;
   - NOUVEAU : journal des derniers appels (organisation, fonction, fournisseur, données masquées ; jamais le contenu).
@@ -40,8 +128,9 @@ Pour l'auditeur :
 
 IMPORTANT — Render : la bibliothèque « openai » n'était PAS dans requirements.txt (seulement dans
 requirements_complet.txt) : sur Render, l'IA ne pouvait pas fonctionner. Elle est ajoutée à requirements.txt.
-Pour activer l'IA : définir OPENAI_API_KEY et/ou MISTRAL_API_KEY dans Render > Environment, puis redéployer.
-Facultatif : EGALYX_IA_MODELE (OpenAI, défaut gpt-4o-mini), EGALYX_IA_MODELE_MISTRAL (défaut mistral-medium-latest).
+Pour activer l'IA : définir la clé du fournisseur voulu (OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY ou
+DEEPSEEK_API_KEY) dans Render > Environment, puis redéployer.
+Facultatif : les variables de modèle ci-dessus, pour changer de modèle sans toucher au code.
 
 
 2. CARTOGRAPHIE DES PROCESSUS (module activé par le super admin)
@@ -85,8 +174,8 @@ INSTALLATION
 3. pip install -r requirements.txt   (ajoute openai)
 4. Arrêtez complètement le serveur puis relancez-le.
 5. Vérifiez :
-   python3 recette/ia_audit.py             → 45/45
-   python3 recette/assistant_donnees.py    → 16/16
+   python3 recette/ia_audit.py             → 50/50
+   python3 recette/assistant_donnees.py    → 17/17
    python3 recette/structure_ajouter.py    → 10/10
    python3 recette/carto_processus.py      → 39/39
    python3 recette/cartouche_qualite.py    → 26/26
@@ -94,7 +183,7 @@ INSTALLATION
    python3 recette/migrations_base.py      → 15/15
    python3 -m pytest -q tests
 6. git add des nouveaux fichiers (liste ci-dessous), commit, déploiement Render.
-7. Render > Environment : MISTRAL_API_KEY et/ou OPENAI_API_KEY. Super admin : choisir le fournisseur,
+7. Render > Environment : la clé du fournisseur choisi (OPENAI_, ANTHROPIC_, MISTRAL_ ou DEEPSEEK_API_KEY). Super admin : choisir le fournisseur,
    vérifier les fonctions d'IA ; activer la cartographie des processus pour les clients concernés.
 8. Mettez à jour vos contrats : fournisseur d'IA, pays de traitement, masquage.
 

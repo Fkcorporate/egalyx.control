@@ -11,6 +11,7 @@ os.environ.pop('ASSISTANT_IA_EXTERNE', None)
 import socle
 from socle import Muet, appel
 os.environ['OPENAI_API_KEY'] = 'sk-recette' + 'x' * 40
+os.environ['ANTHROPIC_API_KEY'] = 'sk-ant-recette-' + 'z' * 30
 with Muet():
     A, ids = socle.preparer()
 import models as M
@@ -138,6 +139,20 @@ verif('… l’outil a lu les données de l’organisation (et elles seules)', l
       and 'REC-B"' not in APPELS[1]['texte'] and 'Reco de B' not in APPELS[1]['texte'])
 verif('… nom du responsable masqué avant l’envoi, remis en clair dans la réponse', len(APPELS) > 1 and 'Koné' not in APPELS[1]['texte']
       and 'Awa' in r.get('texte', '') and 'Koné' in r.get('texte', ''), r.get('texte'))
+CORPS = []
+def faux_anthropic(corps):
+    CORPS.append(corps)
+    if len(CORPS) == 1:
+        return {'stop_reason': 'tool_use', 'content': [{'type': 'tool_use', 'id': 'u1', 'name': 'couverture_audit', 'input': {'niveau_min': 'eleve'}}]}
+    res = json.dumps(corps['messages'][-1]['content'], ensure_ascii=False)
+    return {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': 'Processus à risque élevé jamais audité : Octroi de crédit.' if 'Octroi' in res else 'Rien.'}]}
+P._etat['anthropic'] = faux_anthropic
+appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton_form(sa, '/super-admin/ia/'), 'action': 'fournisseur', 'fournisseur': 'anthropic'})
+r = demander(gest, QUESTION)
+verif('assistant avec Claude : appelle un outil (format Anthropic), lit les données, répond', r.get('intention') == 'ia_externe' and len(CORPS) == 2
+      and any(t['name'] == 'couverture_audit' for t in CORPS[0].get('tools', [])) and CORPS[1]['messages'][-1]['content'][0]['type'] == 'tool_result'
+      and 'Octroi de crédit' in r.get('texte', ''), (r.get('intention'), len(CORPS), r.get('texte')))
+appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton_form(sa, '/super-admin/ia/'), 'action': 'fournisseur', 'fournisseur': 'openai'})
 appel(sa, 'post', '/super-admin/ia/', data={'csrf_token': jeton_form(sa, '/super-admin/ia/'), 'ia_active': '0'})
 APPELS.clear(); demander(gest, QUESTION)
 verif('interrupteur général coupé : aucun appel à l’IA', not APPELS)

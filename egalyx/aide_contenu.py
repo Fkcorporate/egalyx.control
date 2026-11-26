@@ -769,6 +769,60 @@ ARTICLES = [
       perms=['can_use_ia_analysis'],
       questions=['rediger un constat avec l ia', 'ecrire le rapport avec l ia', 'premier jet du rapport']),
 
+    A('analyse_donnees', 'audit', 'Analyser les données d’une mission (achats, comptabilité, ventes)',
+      'Sur la fiche d’une mission : **Analyse de données**. Vous importez les extractions du logiciel comptable ; '
+      '63 tests d’audit repèrent les anomalies : achats (doublons, fractionnement, RIB suspects, séparation des tâches…), '
+      'comptabilité (écritures déséquilibrées, tardives, contre-passées, comptes d’attente…), ventes (numérotation, avoirs, remises, crédit…), '
+      'paie (salariés partis ou inconnus, doubles paies), habilitations (comptes de partants, génériques, droits incompatibles), '
+      'crédit (délégations, impayés non déclassés), LCB-FT (KYC, dépôts fractionnés, PPE, pays à risque, transit) et montants atypiques. '
+      'Module activé sur demande par l’éditeur.',
+      etapes=['**Données** : importez chaque fichier (Excel, CSV ou FEC) — achats (fournisseurs, factures, paiements, bons de commande, salariés), '
+              'grand livre (export SYSCOHADA ou fichier des écritures comptables), ventes, clients, encaissements. '
+              'Les **modèles de fichiers** indiquent les colonnes ; vos noms de colonnes peuvent être différents.',
+              'Vérifiez la **correspondance des colonnes** (proposée automatiquement) puis lisez le **contrôle de qualité** : '
+              'lignes, total à rapprocher de la comptabilité, valeurs illisibles.',
+              '**Tests** : confirmez la **date de clôture** (proposée d’après les données), cochez les tests applicables et réglez les seuils '
+              '(seuil d’approbation, délégations, comptes sensibles, jours fériés…).',
+              '**Résultats** : examinez les anomalies par ordre de priorité, exportez-les en Excel.',
+              'Pour chaque test : **Créer la feuille de travail** (test exhaustif), **Rédiger le constat** (5 C pré-remplis), '
+              'ou **Tirer un échantillon** reproductible dans un fichier.'],
+      notes=['Le résultat ne dépend d’aucune IA : mêmes fichiers et mêmes réglages donnent le même résultat. '
+             'L’IA (si le super admin l’active) propose la correspondance des colonnes, la synthèse et la rédaction du constat, '
+             'sans jamais recevoir les fichiers.',
+             'Chaque fichier reçoit une empreinte SHA-256 (preuve d’intégrité) ; les fichiers sont chiffrés puis supprimés '
+             'à l’échéance de conservation, les résultats restent dans le dossier.',
+             'Une anomalie est un cas à examiner avec les pièces, pas une conclusion.',
+             'Accès : équipe de la mission et gestionnaires de l’audit, avec la permission « Analyse de données » '
+             '(les administrateurs de l’organisation l’ont).'],
+      mots=['analyse', 'donnees', 'data', 'analytics', 'import', 'excel', 'csv', 'fournisseur', 'facture', 'paiement', 'achat',
+            'doublon', 'benford', 'fractionnement', 'rib', 'iban', 'fraude', 'echantillon', 'caat', 'audit continu', 'grand livre',
+            'fec', 'syscohada', 'ecritures', 'cloture', 'ventes', 'avoir', 'cut off', 'encaissement', 'compte d attente', 'paie', 'salaire',
+            'habilitations', 'droits', 'comptes utilisateurs', 'credit', 'impayes', 'kyc', 'lcb', 'lcb-ft', 'blanchiment', 'centif', 'ppe', 'statistique'],
+      perms=['can_use_analyse_donnees'],
+      questions=['analyse de donnees', 'importer les donnees fournisseurs', 'detecter les doublons de factures', 'loi de benford']),
+
+    A('analyse_sources', 'controle', 'Connecter vos systèmes et programmer l’audit continu',
+      'Les données d’audit peuvent être lues directement dans vos systèmes (sans export manuel), et les tests relancés '
+      'automatiquement chaque jour, semaine ou mois : c’est l’audit continu.',
+      etapes=['Administrateur : **Sources de données** (depuis une analyse, ou /analyse-donnees/sources) → choisissez le type : base de données '
+              '(PostgreSQL, MySQL, SQL Server — Sage 100 —, Oracle), SFTP, lien https, SharePoint / OneDrive, Google Drive, Odoo, '
+              'Business Central, Xero, QuickBooks, Zoho Books.',
+              'Renseignez les accès (compte en **lecture seule**) puis **Enregistrer et tester**. Pour une base : une requête SELECT par type '
+              'de données (modèles Sage 100 et « vues préparées par la DSI » fournis) ; pour les fichiers : le chemin.',
+              'Dans une analyse de mission, sur la carte d’un type de données : **Lire depuis une source**, choisissez la période.',
+              'Menu **Audit continu** → **Nouvelle analyse programmée** : source, données, tests, période glissante (mois précédent…), '
+              'fréquence ; facultatif : référentiel de **contrôle de 2e niveau** et **KRI** à alimenter.',
+              'À chaque exécution, les **nouvelles** anomalies deviennent des éléments « en anomalie » de la planification N2 de la période : '
+              'le contrôleur les examine (« conforme » si justifié), soumet, le validateur décide (non-conformités à la validation).'],
+      notes=['Les identifiants sont chiffrés et jamais réaffichés ; seules les requêtes de lecture (SELECT) sont acceptées.',
+             'Un serveur interne (base, SFTP) doit être joignable depuis Internet, avec un pare-feu limité aux adresses du serveur Egalyx.',
+             'Une anomalie déjà signalée n’est pas renvoyée au contrôle N2 à l’exécution suivante ; le KRI reçoit une mesure à chaque exécution.',
+             'Le responsable est prévenu des nouvelles anomalies et des erreurs de lecture.'],
+      mots=['connecteur', 'source', 'base de donnees', 'sql', 'sftp', 'sharepoint', 'onedrive', 'google drive', 'odoo', 'business central',
+            'xero', 'quickbooks', 'zoho', 'sage', 'audit continu', 'programmee', 'automatique', 'controle continu', 'n2', 'kri'],
+      perms=['can_use_analyse_donnees', 'can_manage_audit', 'can_manage_controle_interne_n2'],
+      questions=['connecter odoo', 'audit continu', 'analyse automatique chaque mois', 'lire les donnees dans sage']),
+
     A('carto_processus', 'controle', 'Construire la cartographie des processus',
       'Menu **Carte des processus** : vos processus rangés en pilotage, réalisation et support, entre les besoins '
       'et la satisfaction des parties intéressées. Module activé sur demande par l’éditeur.',

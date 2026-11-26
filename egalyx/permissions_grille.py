@@ -34,6 +34,7 @@ LIBELLES = {
     'can_view_rapport_comite': "Rapport au comité d'audit", 'can_manage_logigram': 'Gérer les logigrammes et processus',
     'can_view_carto_processus': 'Voir la cartographie des processus',
     'can_manage_carto_processus': 'Organiser la cartographie des processus (processus, interactions, réglages)',
+    'can_use_analyse_donnees': 'Analyse de données (importer les données d’une mission, lancer les tests)',
     'can_manage_campaigns': 'Gérer les campagnes de contrôle', 'can_view_campaigns': 'Voir les campagnes de contrôle',
     'can_conduct_campaigns': 'Réaliser les campagnes de contrôle',
     'can_view_controle_interne_n2': 'Voir le contrôle interne N2', 'can_manage_controle_interne_n2': 'Gérer le contrôle interne N2',
@@ -63,7 +64,7 @@ TRANSVERSAL = [
 ]
 ICONES = {'cartographie': 'fa-map', 'kri': 'fa-gauge-high', 'incidents': 'fa-triangle-exclamation', 'pca': 'fa-life-ring',
           'pilotage': 'fa-chart-line', 'processus': 'fa-project-diagram', 'carto_processus': 'fa-sitemap', 'campagnes': 'fa-clipboard-list',
-          'controle_n2': 'fa-user-check', 'qualite': 'fa-medal', 'audit': 'fa-magnifying-glass', 'programme_audit': 'fa-calendar-days',
+          'controle_n2': 'fa-user-check', 'qualite': 'fa-medal', 'audit': 'fa-magnifying-glass', 'analyse_donnees': 'fa-magnifying-glass-chart', 'programme_audit': 'fa-calendar-days',
           'plans_action': 'fa-list-check', 'recommandations': 'fa-clipboard-check', 'questionnaires': 'fa-square-poll-vertical',
           'veille': 'fa-scale-balanced', 'tiers': 'fa-handshake', 'alertes': 'fa-bullhorn', 'ia': 'fa-robot', 'api': 'fa-plug',
           'support': 'fa-ticket'}

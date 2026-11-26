@@ -93,6 +93,10 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     carto_processus.enregistrer(app)                # cartographie des processus (module sur activation du super admin)
     from egalyx import ia_audit
     ia_audit.enregistrer(app)                       # IA au cœur de l'audit : constats depuis les notes, premier jet du rapport
+    from egalyx import analyse_donnees
+    analyse_donnees.enregistrer(app)                # analyse des données d'audit (module sur activation du super admin)
+    from egalyx import analyse_sources
+    analyse_sources.enregistrer(app)                # sources de données (connecteurs) et analyses programmées (audit continu)
     from egalyx import assistant_donnees
     assistant_donnees.enregistrer(app)              # assistant : tous les outils pour l'IA, couverture d'audit, indicateurs
     from egalyx import photo_profil
