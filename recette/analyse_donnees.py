@@ -102,6 +102,14 @@ verif('chef de mission (gestion de l’audit) : page ouverte', r.status_code == 
 verif('lecteur (hors équipe, sans permission) : refusé', appel(lect, 'get', f'{BASE}/audit/{AID}').status_code in (403, 404))
 verif('autre organisation : introuvable', appel(admin_b, 'get', f'{BASE}/audit/{AID}').status_code == 404)
 
+r = appel(gest, 'get', '/dashboard')
+verif('menu Audit Interne : entrée « Analyse de données »', b'href="/analyse-donnees/"' in r.data)
+r = appel(admin, 'get', '/dashboard')
+verif('menu Administration : « Sources de données » (administrateur)', b'href="/analyse-donnees/sources"' in r.data)
+r = appel(gest, 'get', '/analyse-donnees/')
+verif('page « Analyse de données » : missions proposées à la création', r.status_code == 200 and b'AUD-AD' in r.data)
+verif('lecteur sans droit : page refusée', appel(lect, 'get', '/analyse-donnees/').status_code == 404)
+
 print('--- 2. Création et modèles de fichiers')
 r = poster(gest, f'{BASE}/audit/{AID}/nouvelle', {'titre': 'Cycle achats S1 2026'}, page=f'{BASE}/audit/{AID}')
 with A.app.app_context():
@@ -110,6 +118,8 @@ with A.app.app_context():
     verif(f'analyse créée (référence AD-, devise, {len(am.TESTS)} tests cochés)', an is not None and an.reference.startswith('AD-')
           and len(an.tests_choisis) == len(am.TESTS), getattr(an, 'reference', ''))
 PAGE = f'{BASE}/{ANID}'
+r = appel(gest, 'get', '/analyse-donnees/')
+verif('page « Analyse de données » : l’analyse y figure avec sa mission', r.status_code == 200 and b'Cycle achats S1 2026' in r.data)
 r = appel(gest, 'get', PAGE)
 verif('page de l’analyse : étape Données, un emplacement par type de fichier, rangés par cycle', r.status_code == 200
       and len(re.findall(rb'class="ad-jeu[ "]', r.data)) == len(am.ORDRE_JEUX) and r.data.count(b'class="ad-cycle"') == len(am.CYCLES) and b'aria-current="step"' in r.data)

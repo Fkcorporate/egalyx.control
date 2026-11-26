@@ -318,6 +318,35 @@ def cloture_proposee(donnees):
 
 
 # ====================================================================== pages
+@bp.route('/')
+@login_required
+def toutes():
+    """Toutes les analyses de l'organisation (rubrique Audit interne), et création depuis une mission."""
+    from egalyx.commun import client_id_courant
+    cid = client_id_courant()
+    if not cid or not peut_utiliser(cid=cid):
+        abort(404)
+    purger(cid)
+    m = _m()
+    ap = _ap()
+    audits = [a for a in m.Audit.query.filter_by(client_id=cid).order_by(m.Audit.id.desc()).all() if peut_sur_audit(a)]
+    ids = {a.id for a in audits}
+    analyses = [x for x in m.AnalyseDonnees.query.filter_by(client_id=cid).order_by(m.AnalyseDonnees.id.desc()).all() if x.audit_id in ids]
+    par_id = {a.id: a for a in audits}
+    return render_template('egalyx/analyse_donnees_toutes.html', analyses=analyses, audit=par_id.get, audits=[a for a in audits if not _fige(a)],
+                           nom=lambda uid: nom_personne(m.db.session.get(m.User, uid)) if uid else '', gestionnaire=ap.est_gestionnaire_audit(current_user))
+
+
+@bp.route('/nouvelle', methods=['POST'])
+@login_required
+def nouvelle_depuis_liste():
+    try:
+        audit_id = int(request.form.get('audit_id') or 0)
+    except ValueError:
+        abort(404)
+    return nouvelle(audit_id)
+
+
 @bp.route('/audit/<int:audit_id>')
 @login_required
 def liste(audit_id):
@@ -1059,3 +1088,12 @@ def enregistrer(app):
     if 'analyse_donnees' not in app.blueprints:
         app.register_blueprint(bp)
     app.jinja_env.globals['analyse_donnees_peut'] = lambda audit: peut_sur_audit(audit)
+
+    def _visible():
+        from egalyx.commun import client_id_courant
+        try:
+            cid = client_id_courant()
+            return bool(cid) and peut_utiliser(cid=cid)
+        except Exception:  # noqa: BLE001
+            return False
+    app.jinja_env.globals['analyse_donnees_visible'] = _visible
