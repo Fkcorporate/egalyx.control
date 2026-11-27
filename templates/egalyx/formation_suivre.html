@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ mod.titre }}{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fs-texte { max-width: 46rem; font-size: 1rem; line-height: 1.7; }
+  .fs-texte h3 { font-size: 1.1rem; font-weight: 650; margin: 1.4rem 0 .5rem; }
+  .fs-texte ul, .fs-texte ol { padding-left: 1.3rem; }
+  .fs-video { position: relative; aspect-ratio: 16 / 9; max-width: 46rem; border-radius: 10px; overflow: hidden; background: #000; }
+  .fs-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .fs-q { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .75rem; }
+  .fs-q legend { font-size: .98rem; font-weight: 600; margin-bottom: .5rem; float: left; width: 100%; padding: 0; }
+  .fs-q legend + * { clear: left; }
+  .fs-q.juste { border-color: var(--bs-success); }
+  .fs-q.faux { border-color: var(--bs-danger); }
+  .fs-verdict { font-size: .85rem; margin-top: .4rem; }
+  .fs-resultat { border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+</style>{% endblock %}
+{% block content %}
+{% set qs = mod.questions or [] %}
+{% set valide = a and a.statut == 'reussi' %}
+<div class="container" style="max-width: 900px;">
+  {% if apercu %}
+    {{ pg.entete(mod.titre, 'fa-eye', 'Aperçu : c’est ce que verront les participants (le quiz ne peut pas être envoyé ici)', retour=url_for('formation_conformite.accueil')) }}
+  {% else %}
+    {{ pg.entete(c.titre, 'fa-graduation-cap', mod.titre ~ (' — à faire avant le ' ~ c.date_limite.strftime('%d/%m/%Y') if c.date_limite and not valide else ''), retour=url_for('formation_conformite.mes_formations'), libelle_retour='Mes formations') }}
+  {% endif %}
+
+  {% if resultat %}
+    <div class="fs-resultat {{ 'bg-success-subtle' if resultat.reussi else 'bg-warning-subtle' }}" role="status">
+      <strong>{{ 'Formation validée' if resultat.reussi else 'Pas encore validée' }}</strong> : {{ resultat.score }} % de bonnes réponses
+      (minimum demandé : {{ mod.score_min }} %).
+      {% if not resultat.reussi %}Relisez le contenu, puis réessayez : les questions à revoir sont signalées ci-dessous.
+      {% else %}<a class="ms-2" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf me-1"></i>Télécharger l’attestation</a>{% endif %}
+    </div>
+  {% elif valide %}
+    <div class="fs-resultat bg-success-subtle" role="status"><strong>Formation validée</strong> le {{ pg.date(a.reussi_le, True) }}{% if a.meilleur_score is not none and qs %}, meilleur score {{ a.meilleur_score }} %{% endif %}.
+      <a class="ms-2" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf me-1"></i>Télécharger l’attestation</a></div>
+  {% endif %}
+
+  {% if c and c.message and not valide %}{% call pg.carte() %}<div class="small">{{ c.message }}</div>{% endcall %}{% endif %}
+
+  {% call pg.carte('Contenu') %}
+    {% if mod.resume %}<p class="fw-semibold">{{ mod.resume }}</p>{% endif %}
+    {% if video %}<div class="fs-video mb-3"><iframe src="{{ video }}" title="Vidéo : {{ mod.titre }}" allow="fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>
+    {% elif mod.video_url %}<p><a href="{{ mod.video_url }}" target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-1"></i>Ouvrir la vidéo</a></p>{% endif %}
+    <div class="fs-texte">{{ contenu }}</div>
+  {% endcall %}
+
+  {% if qs %}
+  {% call pg.carte('Quiz', qs|length ~ ' question' ~ ('s' if qs|length > 1) ~ ' — ' ~ mod.score_min ~ ' % de bonnes réponses pour valider') %}
+    <form method="POST" action="{{ url_for('formation_conformite.suivre', aid=a.id) if a else '#' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% for q in qs %}{% set i = loop.index0 %}
+        {% set multi = q.bonnes|length > 1 %}
+        {% set coches = (resultat.reponses[i] if resultat else (choisis[i] if choisis else [])) or [] %}
+        <fieldset class="fs-q {{ ('juste' if resultat.justes[i] else 'faux') if resultat }}">
+          <legend>{{ loop.index }}. {{ q.texte }}{% if multi %} <span class="text-secondary small fw-normal">(plusieurs réponses)</span>{% endif %}</legend>
+          {% for ch in q.choix %}
+          <div class="form-check">
+            <input class="form-check-input" type="{{ 'checkbox' if multi else 'radio' }}" name="q{{ i }}" id="q{{ i }}_{{ loop.index0 }}" value="{{ loop.index0 }}"
+                   {{ 'checked' if loop.index0 in coches }} {{ 'disabled' if apercu }}>
+            <label class="form-check-label" for="q{{ i }}_{{ loop.index0 }}">{{ ch }}{% if valide and loop.index0 in q.bonnes %} <span class="badge text-bg-success ms-1">bonne réponse</span>{% endif %}</label>
+          </div>
+          {% endfor %}
+          {% if resultat %}<div class="fs-verdict {{ 'text-success-emphasis' if resultat.justes[i] else 'text-danger-emphasis' }}">{{ 'Juste' if resultat.justes[i] else 'À revoir' }}</div>{% endif %}
+          {% if valide and q.explication %}<div class="fs-verdict text-secondary">{{ q.explication }}</div>{% endif %}
+        </fieldset>
+      {% endfor %}
+      {% if not apercu and not valide and c.statut == 'active' %}
+        <button class="btn btn-primary">Valider mes réponses</button>
+      {% endif %}
+    </form>
+  {% endcall %}
+  {% elif not apercu and not valide and c.statut == 'active' %}
+    <form method="POST" action="{{ url_for('formation_conformite.valider_sans_quiz', aid=a.id) }}" class="mb-4">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary"><i class="fas fa-check me-1"></i>J'ai lu et compris</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

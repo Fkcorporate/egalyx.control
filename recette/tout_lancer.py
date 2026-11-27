@@ -68,6 +68,8 @@ ETAPES = [
     ('Analyse de données, lot 3 : connecteurs, audit continu (N2, KRI, notifications)', 'analyse_donnees_lot3.py', []),
     ('Analyse de données, lot 4 : paie, habilitations, crédit, LCB-FT, statistique', 'analyse_donnees_lot4.py', []),
     ('Profil réglementaire par organisation (Côte d’Ivoire / UEMOA, France / UE)', 'profil_reglementaire.py', []),
+    ('Formation à la conformité (e-learning) : activation, droits, modules, quiz, campagnes', 'formation_conformite.py', []),
+    ('Formation à la conformité, lot 2 : bibliothèque, parcours, attestations, relances, KRI', 'formation_conformite_lot2.py', []),
     ('PDF sans WeasyPrint et pages réparées', 'pdf_secours.py', []),
     ('Boutons : plus aucune adresse inexistante', 'boutons_morts.py', []),
     ('Compatibilité avec la version de Python de Render', 'compat_python.py', []),

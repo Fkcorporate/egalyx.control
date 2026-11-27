@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}{{ c.titre }} — Formations à la conformité{% endblock %}
+{% block styles %}{{ pg.styles() }}{% endblock %}
+{% set BADGE = {'reussi': 'success', 'en_cours': 'primary', 'a_faire': 'secondary', 'en_retard': 'danger'} %}
+{% block content %}
+<div class="container" style="max-width: 1100px;">
+  {% call pg.entete(c.titre, 'fa-paper-plane', (mod.titre if mod else '') ~ (' — date limite ' ~ c.date_limite.strftime('%d/%m/%Y') if c.date_limite else ''), retour=url_for('formation_conformite.accueil')) %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('formation_conformite.campagne_export', kid=c.id) }}"><i class="fas fa-file-excel me-1"></i>Export Excel</a>
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Personnes concernées', stats.total) }}
+    {{ pg.kpi('Validé', stats.reussi ~ ' (' ~ stats.taux ~ ' %)', 'var(--bs-success)' if stats.total and stats.reussi == stats.total else none) }}
+    {{ pg.kpi('Commencé', stats.en_cours) }}
+    {{ pg.kpi('En retard', stats.en_retard, 'var(--bs-danger)' if stats.en_retard else none) }}
+    {{ pg.kpi('Score moyen', (stats.score_moyen ~ ' %') if stats.score_moyen is not none else '—') }}
+  </div>
+
+  {% if gerer %}
+  {% call pg.carte('Actions') %}
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      {% if c.statut == 'active' %}
+      <form method="POST" action="{{ url_for('formation_conformite.campagne_action', kid=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-primary" name="action" value="relancer" {{ 'disabled' if stats.reussi == stats.total }}><i class="fas fa-bell me-1"></i>Relancer les personnes qui n'ont pas validé</button></form>
+      <form method="POST" action="{{ url_for('formation_conformite.campagne_action', kid=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="synchroniser"><i class="fas fa-user-plus me-1"></i>Ajouter les nouvelles personnes de la cible</button></form>
+      <form method="POST" action="{{ url_for('formation_conformite.campagne_action', kid=c.id) }}" onsubmit="return confirm('Clore la campagne ? Les personnes qui n’ont pas validé ne pourront plus le faire.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="clore"><i class="fas fa-lock me-1"></i>Clore</button></form>
+      {% else %}
+      <span class="badge text-bg-secondary">Campagne close</span>
+      <form method="POST" action="{{ url_for('formation_conformite.campagne_action', kid=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="rouvrir">Rouvrir</button></form>
+      {% endif %}
+      {% if c.derniere_relance %}<span class="pg-second">Dernière relance : {{ pg.date(c.derniere_relance, True) }}</span>{% endif %}
+    </div>
+    <form method="POST" action="{{ url_for('formation_conformite.campagne_action', kid=c.id) }}" class="row g-2 align-items-end mt-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-5"><div class="form-check"><input class="form-check-input" type="checkbox" id="relances_auto" name="relances_auto" value="1" {{ 'checked' if c.relances_auto is not false }}>
+        <label class="form-check-label" for="relances_auto">Relances automatiques (J-7, veille, J+1, J+7)</label></div></div>
+      <div class="col-md-5"><label class="form-label small mb-1" for="kri_id">Indicateur de risque alimenté chaque jour</label>
+        <select class="form-select form-select-sm" id="kri_id" name="kri_id"><option value="">— Aucun —</option>
+          {% for k in kris %}<option value="{{ k.id }}" {{ 'selected' if c.kri_id == k.id }}>{{ k.nom }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100" name="action" value="reglages">Enregistrer</button></div>
+    </form>
+  {% endcall %}
+  {% elif kri %}
+  <p class="pg-second">Indicateur alimenté : {{ kri.nom }}</p>
+  {% endif %}
+
+  {% call pg.carte('Suivi par personne') %}
+    {% if lignes %}
+    <table class="pg-table">
+      <thead><tr><th>Personne</th><th>Statut</th><th class="pg-num">Tentatives</th><th class="pg-num">Meilleur score</th><th>Validé le</th></tr></thead>
+      <tbody>
+      {% for l in lignes %}
+        <tr>
+          <td class="fw-semibold">{{ nom_personne(l.u) if l.u else '—' }}{% if l.u and l.u.fonction %}<div class="pg-second">{{ l.u.fonction }}</div>{% endif %}</td>
+          <td><span class="badge text-bg-{{ BADGE[l.statut] }}">{{ STATUTS[l.statut] }}</span></td>
+          <td class="pg-num">{{ l.a.tentatives or 0 }}</td>
+          <td class="pg-num">{{ (l.a.meilleur_score ~ ' %') if l.a.meilleur_score is not none else '—' }}</td>
+          <td>{{ pg.date(l.a.reussi_le, True) }}{% if l.statut == 'reussi' %} <a class="ms-1" href="{{ url_for('formation_conformite.attestation', aid=l.a.id) }}" aria-label="Attestation de {{ nom_personne(l.u) if l.u else '' }}"><i class="fas fa-file-pdf"></i></a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}{{ pg.vide('Personne ne correspond à la cible de cette campagne.', 'fa-users') }}{% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

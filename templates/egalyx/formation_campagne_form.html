@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% set v = saisie or {} %}
+{% block title %}Lancer une campagne — Formations à la conformité{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fc-cible { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .75rem .9rem; max-height: 260px; overflow: auto; }
+  .fc-cible .form-check { margin-bottom: .25rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 860px;">
+  {{ pg.entete('Lancer une campagne', 'fa-paper-plane', 'Chaque personne concernée reçoit une notification et retrouve la formation dans « Mes formations »', retour=url_for('formation_conformite.accueil')) }}
+  {% if not modules %}
+    {% call pg.carte() %}{{ pg.vide('Aucun module publié. Publiez d’abord un module.', 'fa-book-open') }}
+      <div class="text-center"><a class="btn btn-primary btn-sm" href="{{ url_for('formation_conformite.module_form') }}">Créer un module</a></div>{% endcall %}
+  {% else %}
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% call pg.carte('Formation') %}
+      <div class="row g-3">
+        <div class="col-md-7"><label class="form-label" for="module_id">Module</label>
+          <select class="form-select" id="module_id" name="module_id" required>
+            {% set mc = (v.module_id if saisie and v.module_id else (choisi|string if choisi else '')) %}
+            {% if parcours %}<optgroup label="Parcours complet (une campagne par module)">
+              {% for code, titre, n in parcours %}<option value="parcours:{{ code }}" {{ 'selected' if mc == 'parcours:' ~ code }}>{{ titre }} ({{ n }} modules)</option>{% endfor %}
+            </optgroup>{% endif %}
+            <optgroup label="Un module">
+            {% for mod in modules %}<option value="{{ mod.id }}" {{ 'selected' if mc == mod.id|string }}>{{ mod.titre }} ({{ mod.duree_minutes }} min)</option>{% endfor %}
+            </optgroup>
+          </select></div>
+        <div class="col-md-5"><label class="form-label" for="date_limite">Date limite</label>
+          <input class="form-control" type="date" id="date_limite" name="date_limite" value="{{ v.date_limite or '' }}"></div>
+        <div class="col-12"><label class="form-label" for="titre">Nom de la campagne <span class="text-secondary small">(par défaut : le titre du module)</span></label>
+          <input class="form-control" id="titre" name="titre" maxlength="200" value="{{ v.titre or '' }}" placeholder="Ex. : Formation LCB-FT annuelle 2026"></div>
+        <div class="col-12"><label class="form-label" for="message">Message aux participants (facultatif)</label>
+          <textarea class="form-control" id="message" name="message" rows="2" maxlength="2000">{{ v.message or '' }}</textarea></div>
+      </div>
+    {% endcall %}
+    {% call pg.carte('Personnes concernées') %}
+      {% set ct = v.cible_type or 'tous' %}
+      <fieldset>
+        <legend class="visually-hidden">Personnes concernées</legend>
+        <div class="form-check"><input class="form-check-input" type="radio" name="cible_type" id="ct_tous" value="tous" {{ 'checked' if ct == 'tous' }}>
+          <label class="form-check-label" for="ct_tous">Toute l'organisation ({{ personnes|length }} personne{{ 's' if personnes|length > 1 }})</label></div>
+        {% if directions %}<div class="form-check"><input class="form-check-input" type="radio" name="cible_type" id="ct_dir" value="directions" {{ 'checked' if ct == 'directions' }}>
+          <label class="form-check-label" for="ct_dir">Certaines directions</label></div>{% endif %}
+        <div class="form-check"><input class="form-check-input" type="radio" name="cible_type" id="ct_roles" value="roles" {{ 'checked' if ct == 'roles' }}>
+          <label class="form-check-label" for="ct_roles">Certains rôles</label></div>
+        <div class="form-check"><input class="form-check-input" type="radio" name="cible_type" id="ct_pers" value="utilisateurs" {{ 'checked' if ct == 'utilisateurs' }}>
+          <label class="form-check-label" for="ct_pers">Une liste de personnes (ex. : postes les plus exposés)</label></div>
+      </fieldset>
+      {% if directions %}
+      <div class="fc-cible mt-3" data-cible="directions"><div class="small fw-semibold mb-2">Directions</div>
+        {% for d in directions %}<div class="form-check"><input class="form-check-input" type="checkbox" name="cible_directions" id="d{{ d.id }}" value="{{ d.id }}" {{ 'checked' if saisie and (d.id|string) in v.getlist('cible_directions') }}>
+          <label class="form-check-label" for="d{{ d.id }}">{{ d.nom }}</label></div>{% endfor %}</div>
+      {% endif %}
+      <div class="fc-cible mt-3" data-cible="roles"><div class="small fw-semibold mb-2">Rôles</div>
+        {% for r in roles %}<div class="form-check"><input class="form-check-input" type="checkbox" name="cible_roles" id="r{{ loop.index }}" value="{{ r }}" {{ 'checked' if saisie and r in v.getlist('cible_roles') }}>
+          <label class="form-check-label" for="r{{ loop.index }}">{{ r|replace('_', ' ')|capitalize }}</label></div>{% endfor %}</div>
+      <div class="fc-cible mt-3" data-cible="utilisateurs"><div class="small fw-semibold mb-2">Personnes</div>
+        <input class="form-control form-control-sm mb-2" type="search" id="fc-filtre" placeholder="Filtrer par nom" aria-label="Filtrer les personnes par nom">
+        {% for u in personnes %}<div class="form-check fc-pers"><input class="form-check-input" type="checkbox" name="cible_utilisateurs" id="u{{ u.id }}" value="{{ u.id }}" {{ 'checked' if saisie and (u.id|string) in v.getlist('cible_utilisateurs') }}>
+          <label class="form-check-label" for="u{{ u.id }}">{{ ((u.prenom or '') ~ ' ' ~ (u.nom or ''))|trim or u.username }}{% if u.fonction %} <span class="text-secondary small">— {{ u.fonction }}</span>{% endif %}</label></div>{% endfor %}</div>
+    {% endcall %}
+    {% call pg.carte('Suivi') %}
+      <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="relances_auto" name="relances_auto" value="1" {{ 'checked' if not saisie or v.relances_auto }}>
+        <label class="form-check-label" for="relances_auto">Relances automatiques (7 jours avant, la veille, puis 1 et 7 jours après la date limite), par notification et e-mail</label></div>
+      {% if kris %}
+      <label class="form-label" for="kri_id">Alimenter un indicateur de risque (facultatif)</label>
+      <select class="form-select" id="kri_id" name="kri_id">
+        <option value="">— Aucun —</option>
+        {% for k in kris %}<option value="{{ k.id }}" {{ 'selected' if saisie and v.kri_id == k.id|string }}>{{ k.nom }}</option>{% endfor %}
+      </select>
+      <p class="small text-secondary mt-1 mb-0">Chaque jour, le KRI reçoit le pourcentage de personnes qui n’ont pas encore validé.</p>
+      {% endif %}
+    {% endcall %}
+    <button class="btn btn-primary mb-4"><i class="fas fa-paper-plane me-1"></i>Lancer la campagne</button>
+  </form>
+  {% endif %}
+</div>
+<script>
+(function () {
+  function maj() {
+    var choix = (document.querySelector('input[name=cible_type]:checked') || {}).value;
+    document.querySelectorAll('[data-cible]').forEach(function (b) { b.hidden = b.getAttribute('data-cible') !== choix; });
+  }
+  document.querySelectorAll('input[name=cible_type]').forEach(function (r) { r.addEventListener('change', maj); });
+  var f = document.getElementById('fc-filtre');
+  if (f) f.addEventListener('input', function () {
+    var t = f.value.toLowerCase();
+    document.querySelectorAll('.fc-pers').forEach(function (p) { p.hidden = t && p.textContent.toLowerCase().indexOf(t) < 0; });
+  });
+  maj();
+})();
+</script>
+{% endblock %}

@@ -99,6 +99,8 @@ def enregistrer_extensions(app, db, csrf=None, recalculer_cotations=None, constr
     profil_reglementaire.enregistrer(app)           # profil réglementaire par organisation (Côte d'Ivoire / UEMOA, France / UE)
     from egalyx import analyse_sources
     analyse_sources.enregistrer(app)                # sources de données (connecteurs) et analyses programmées (audit continu)
+    from egalyx import formation_conformite
+    formation_conformite.enregistrer(app)           # formation à la conformité (e-learning, module sur activation du super admin)
     from egalyx import assistant_donnees
     assistant_donnees.enregistrer(app)              # assistant : tous les outils pour l'IA, couverture d'audit, indicateurs
     from egalyx import photo_profil

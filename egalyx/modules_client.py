@@ -60,6 +60,8 @@ CATALOGUE = [
      'Conformité', ('can_view_tiers', 'can_manage_tiers'), ()),
     ('alertes', 'Dispositif d’alerte', 'Signalements (Sapin II), lien public et suivi confidentiel',
      'Conformité', ('can_manage_alertes',), ()),
+    ('formation_conformite', 'Formation à la conformité (e-learning)', 'Modules à suivre en ligne et quiz (LCB-FT, anticorruption, RGPD, cybersécurité…), campagnes, relances, suivi et preuves',
+     'Conformité', ('can_view_formation_conformite', 'can_manage_formation_conformite'), ()),
     ('ia', 'Analyse IA', 'Analyses assistées par IA',
      'Outils', ('can_use_ia_analysis',), ('analyse_ia',)),
     ('api', 'API et intégrations', 'Clés API, webhooks, journaux d’appels',
@@ -72,7 +74,7 @@ GROUPES = ['Gestion des risques', 'Contrôle interne', 'Audit interne', 'Conform
 MODULE_DE_PERMISSION = {p: m[0] for m in CATALOGUE for p in m[4]}
 # Modules livrés sur demande : fermés tant que le super admin ne les a pas cochés pour le client
 # (même pour un client « sans restriction » ou suivant sa formule).
-SUR_ACTIVATION = {'carto_processus', 'analyse_donnees'}
+SUR_ACTIVATION = {'carto_processus', 'analyse_donnees', 'formation_conformite'}
 
 PROFILS = {
     'audit': ('Cabinet ou service d’audit', 'Missions d’audit, programme, recommandations et plans d’action',

@@ -83,6 +83,12 @@ def rediger_synthese(c):
         if c.get('criblages_a_verifier'):
             txt += f" ; {c['criblages_a_verifier']} correspondance{'s' if c['criblages_a_verifier'] > 1 else ''} avec les listes de sanctions à lever"
         p.append(txt + '.')
+    if c.get('formation_campagnes'):
+        txt = (f"Formation à la conformité : {_pluriel(c['formation_campagnes'], 'campagne en cours', 'campagnes en cours')}, "
+               f"taux de réalisation de {c['formation_taux'] if c['formation_taux'] is not None else 0} %")
+        if c.get('formation_retard'):
+            txt += f", {_pluriel(c['formation_retard'], 'personne en retard', 'personnes en retard')}"
+        p.append(txt + '.')
     if c.get('alertes') is not None and (c['alertes'] or c.get('alertes_ouvertes')):
         txt = f"Dispositif d'alerte : {_pluriel(c['alertes'], 'signalement reçu', 'signalements reçus')} sur 12 mois, {c['alertes_ouvertes']} en cours"
         if c.get('alertes_delais'):
@@ -147,6 +153,17 @@ def collecter(cid, construire_dashboard):
              alertes_delais=sum(1 for s in sig if not s.est_cloture and (
                  (not s.date_accuse_reception and s.echeance_accuse < maintenant) or
                  (not s.date_retour_information and s.echeance_retour and s.echeance_retour < maintenant))))
+    try:                                   # formation à la conformité (si le module est activé pour l'organisation)
+        from egalyx import formation_conformite as fc
+        if fc.module_actif(cid):
+            from models import CampagneFormationConformite
+            camp = CampagneFormationConformite.query.filter_by(client_id=cid, statut='active').all()
+            st = [fc.chiffres(x) for x in camp]
+            tot, ok = sum(x['total'] for x in st), sum(x['reussi'] for x in st)
+            c.update(formation_campagnes=len(camp), formation_taux=round(100 * ok / tot) if tot else None,
+                     formation_retard=sum(x['en_retard'] for x in st))
+    except Exception:  # noqa: BLE001
+        pass
     audits_detail = []
     for a in sorted(audits, key=lambda a: a.date_debut_prevue or date.min, reverse=True):
         cs = [x for x in constats if x.audit_id == a.id]

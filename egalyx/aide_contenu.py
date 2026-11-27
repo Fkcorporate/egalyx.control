@@ -801,6 +801,35 @@ ARTICLES = [
       perms=['can_use_analyse_donnees'],
       questions=['analyse de donnees', 'importer les donnees fournisseurs', 'detecter les doublons de factures', 'loi de benford']),
 
+    A('formation_conformite', 'conformite', 'Former le personnel à la conformité (e-learning)',
+      'Menu **Conformité > Formations conformité**. Vous créez des modules (un texte à lire, une vidéo si besoin, puis un quiz) '
+      'et vous lancez des campagnes : chaque personne concernée reçoit une notification et suit la formation depuis **Mes formations**. '
+      'Le suivi montre qui a validé, qui est en retard, et s’exporte en Excel comme preuve de formation (LCB-FT, anticorruption, RGPD…). '
+      'Module activé sur demande par l’éditeur.',
+      etapes=['**Nouveau module** : titre, thème, durée, texte (## intertitre, - liste, **gras**), vidéo YouTube ou Vimeo facultative.',
+              'Ajoutez les **questions du quiz** et cochez la ou les bonnes réponses ; fixez le **score minimum** pour valider. '
+              'Sans question, la personne valide par « J’ai lu et compris ».',
+              '**Enregistrer et publier**, puis **Lancer une campagne** : module, date limite, personnes concernées '
+              '(toute l’organisation, des directions, des rôles ou une liste de personnes).',
+              'Sur la campagne : **Relancer** les personnes qui n’ont pas validé, **Ajouter les nouvelles personnes** de la cible, '
+              '**Export Excel**, puis **Clore** à la fin.'],
+      notes=['Les tentatives sont illimitées ; les bonnes réponses ne sont montrées qu’une fois le module validé.',
+             'Modifier un module publié crée une nouvelle version ; les validations passées gardent la version suivie.',
+             'Un module utilisé par une campagne ne peut pas être supprimé (les preuves sont conservées) : archivez-le.',
+             'Accès : administrateurs de l’organisation et permission « Gérer les formations à la conformité » ; '
+             '« Voir le suivi des formations » donne la lecture seule. Chacun ne voit que ses propres formations.',
+             '**Bibliothèque Egalyx** : des modules prêts à l’emploi (parcours contrôle interne en 7 modules, parcours conformité : '
+             'LCB-FT UEMOA ou France, anticorruption, données personnelles, cybersécurité, éthique). **Importer** en fait une copie '
+             'modifiable ; quand Egalyx publie une nouvelle version, le module affiche « Nouvelle version disponible ».',
+             '**Lancer le parcours** crée une campagne par module, en une fois, pour les mêmes personnes et la même date limite.',
+             '**Attestation PDF** nominative pour chaque formation validée (Mes formations, ou icône PDF dans le suivi).',
+             '**Relances automatiques** 7 jours avant, la veille, puis 1 et 7 jours après la date limite (notification et e-mail) ; '
+             'désactivables par campagne. Une campagne peut alimenter chaque jour un **KRI** (% de personnes qui n’ont pas validé).'],
+      mots=['formation', 'e-learning', 'elearning', 'quiz', 'bibliotheque', 'parcours', 'attestation pdf', 'certificat', 'sensibilisation', 'campagne', 'module', 'attestation', 'lcb-ft', 'blanchiment',
+            'anticorruption', 'sapin', 'rgpd', 'cybersecurite', 'phishing', 'ethique', 'mes formations', 'relance', 'preuve'],
+      perms=['can_manage_formation_conformite', 'can_view_formation_conformite'],
+      questions=['creer une formation', 'lancer une campagne de formation', 'former le personnel lcb-ft', 'qui a suivi la formation']),
+
     A('profil_reglementaire', 'admin', 'Profil réglementaire : Côte d’Ivoire / UEMOA ou France / UE',
       'Chaque organisation a un profil réglementaire, choisi par l’éditeur : « Côte d’Ivoire / UEMOA (OHADA) » ou « France / Union européenne ». '
       'Il adapte l’outil à vos normes : devise, référentiel comptable, jours fériés, lutte contre le blanchiment, références citées.',

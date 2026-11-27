@@ -50,6 +50,8 @@ LIBELLES = {
     'can_create_veille': 'Créer des veilles', 'can_edit_veille': 'Modifier des veilles', 'can_delete_veille': 'Supprimer des veilles',
     'can_approve_veille': 'Approuver les veilles', 'can_view_tiers': 'Voir les tiers (LCB-FT)', 'can_manage_tiers': 'Gérer les tiers',
     'can_manage_alertes': "Référent du dispositif d'alerte", 'can_use_ia_analysis': "Utiliser l'analyse IA",
+    'can_view_formation_conformite': 'Voir le suivi des formations à la conformité',
+    'can_manage_formation_conformite': 'Gérer les formations à la conformité (modules, campagnes, relances)',
     'can_manage_api': 'Gérer les clés API', 'can_manage_webhooks': 'Gérer les webhooks', 'can_view_api_logs': 'Consulter les journaux API',
     'can_view_tickets': 'Voir les tickets de support', 'can_manage_tickets': 'Gérer les tickets de support',
 }
@@ -66,10 +68,10 @@ ICONES = {'cartographie': 'fa-map', 'kri': 'fa-gauge-high', 'incidents': 'fa-tri
           'pilotage': 'fa-chart-line', 'processus': 'fa-project-diagram', 'carto_processus': 'fa-sitemap', 'campagnes': 'fa-clipboard-list',
           'controle_n2': 'fa-user-check', 'qualite': 'fa-medal', 'audit': 'fa-magnifying-glass', 'analyse_donnees': 'fa-magnifying-glass-chart', 'programme_audit': 'fa-calendar-days',
           'plans_action': 'fa-list-check', 'recommandations': 'fa-clipboard-check', 'questionnaires': 'fa-square-poll-vertical',
-          'veille': 'fa-scale-balanced', 'tiers': 'fa-handshake', 'alertes': 'fa-bullhorn', 'ia': 'fa-robot', 'api': 'fa-plug',
+          'veille': 'fa-scale-balanced', 'tiers': 'fa-handshake', 'alertes': 'fa-bullhorn', 'formation_conformite': 'fa-graduation-cap', 'ia': 'fa-robot', 'api': 'fa-plug',
           'support': 'fa-ticket'}
 # « gérer » donne « voir »
-IMPLIQUE = {'can_manage_carto_processus': 'can_view_carto_processus', 'can_manage_recommandations': 'can_view_recommandations', 'can_manage_controle_interne_n2': 'can_view_controle_interne_n2',
+IMPLIQUE = {'can_manage_formation_conformite': 'can_view_formation_conformite', 'can_manage_carto_processus': 'can_view_carto_processus', 'can_manage_recommandations': 'can_view_recommandations', 'can_manage_controle_interne_n2': 'can_view_controle_interne_n2',
             'can_manage_campaigns': 'can_view_campaigns', 'can_conduct_campaigns': 'can_view_campaigns',
             'can_manage_incidents': 'can_view_incidents', 'can_manage_bcp': 'can_view_bcp', 'can_test_bcp': 'can_view_bcp',
             'can_manage_quality': 'can_view_quality', 'can_manage_quality_plans': 'can_view_quality',

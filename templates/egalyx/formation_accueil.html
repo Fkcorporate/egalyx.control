@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% block title %}Formations à la conformité{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fc-badge-pub { font-size: .72rem; }
+  .fb-parcours + .fb-parcours { margin-top: 1.6rem; padding-top: 1.2rem; border-top: 1px solid var(--bs-border-color); }
+  .fb-parcours form { display: inline; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 1150px;">
+  {% call pg.entete('Formations à la conformité', 'fa-graduation-cap', 'Modules à suivre en ligne, quiz, campagnes et preuves de formation') %}
+    {% if formation_bib_admin_visible is defined and formation_bib_admin_visible() %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('formation_conformite.bib_admin') }}"><i class="fas fa-book me-1"></i>Gérer la bibliothèque Egalyx</a>
+    {% endif %}
+    {% if gerer %}
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('formation_conformite.module_form') }}"><i class="fas fa-plus me-1"></i>Nouveau module</a>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('formation_conformite.campagne_form') }}"><i class="fas fa-paper-plane me-1"></i>Lancer une campagne</a>
+    {% endif %}
+  {% endcall %}
+
+  <div class="pg-kpis">
+    {{ pg.kpi('Modules publiés', kpi.publies) }}
+    {{ pg.kpi('Campagnes en cours', kpi.actives) }}
+    {{ pg.kpi('Taux de réalisation', (kpi.taux ~ ' %') if kpi.taux is not none else '—') }}
+    {{ pg.kpi('Personnes en retard', kpi.retard, 'var(--bs-danger)' if kpi.retard else none) }}
+  </div>
+
+  {% call pg.carte('Campagnes', 'Une campagne = un module, des personnes concernées et une date limite') %}
+    {% if campagnes %}
+    <table class="pg-table">
+      <thead><tr><th>Campagne</th><th>Module</th><th>Date limite</th><th>Réalisation</th><th class="pg-num">En retard</th><th>État</th></tr></thead>
+      <tbody>
+      {% for c in campagnes %}{% set s = stats[c.id] %}
+        <tr>
+          <td class="fw-semibold"><a href="{{ url_for('formation_conformite.campagne', kid=c.id) }}">{{ c.titre }}</a></td>
+          <td class="pg-second">{{ par_module[c.module_id].titre if c.module_id in par_module else '—' }}</td>
+          <td>{{ pg.date(c.date_limite) }}</td>
+          <td>{{ pg.barre(s.taux) }} <span class="pg-second">{{ s.reussi }}/{{ s.total }}</span></td>
+          <td class="pg-num">{% if s.en_retard %}<span class="text-danger-emphasis fw-semibold">{{ s.en_retard }}</span>{% else %}0{% endif %}</td>
+          <td>{% if c.statut == 'active' %}<span class="badge text-bg-primary">En cours</span>{% else %}<span class="badge text-bg-secondary">Close</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      {{ pg.vide('Aucune campagne pour l’instant. Publiez un module, puis lancez une campagne.' if gerer else 'Aucune campagne pour l’instant.', 'fa-paper-plane') }}
+    {% endif %}
+  {% endcall %}
+
+  {% if bib and bib.parcours %}
+  <div id="bibliotheque"></div>
+  {% call pg.carte('Bibliothèque Egalyx', 'Modules prêts à l’emploi, rédigés par Egalyx — version proposée : ' ~ bib.profil_libelle) %}
+    {% for p in bib.parcours %}
+    <div class="fb-parcours">
+      <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+        <div><h3 class="h6 fw-bold mb-1">{{ p.titre }}</h3><div class="pg-second">{{ p.description }}</div></div>
+        <div class="d-flex gap-2">
+          {% if p.a_importer %}
+          <form method="POST" action="{{ url_for('formation_conformite.bib_importer_parcours', code=p.code) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-primary"><i class="fas fa-download me-1"></i>Importer le parcours ({{ p.a_importer }})</button></form>
+          {% endif %}
+          <a class="btn btn-sm btn-primary" href="{{ url_for('formation_conformite.campagne_form', parcours=p.code) }}"><i class="fas fa-paper-plane me-1"></i>Lancer le parcours</a>
+        </div>
+      </div>
+      <table class="pg-table">
+        <thead><tr><th>Module</th><th class="pg-num">Durée</th><th class="pg-num">Questions</th><th>Dans votre espace</th><th></th></tr></thead>
+        <tbody>
+        {% for l in p.lignes %}
+          <tr>
+            <td class="fw-semibold">{{ l.b.titre }}<div class="pg-second fw-normal">{{ l.b.resume }}</div></td>
+            <td class="pg-num">{{ l.b.duree_minutes }} min</td>
+            <td class="pg-num">{{ (l.b.questions or [])|length }}</td>
+            <td>{% if l.etat == 'absent' %}<span class="pg-second">Pas encore importé</span>
+              {% elif l.etat == 'maj' %}<a class="badge text-bg-warning text-decoration-none" href="{{ url_for('formation_conformite.module_form', mid=l.mod.id) }}">Nouvelle version disponible</a>
+              {% else %}<a href="{{ url_for('formation_conformite.module_form', mid=l.mod.id) }}"><span class="badge text-bg-success">Importé</span></a>{% endif %}</td>
+            <td class="text-nowrap">{% if l.etat == 'absent' %}
+              <form method="POST" action="{{ url_for('formation_conformite.bib_importer', code=l.b.code) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-primary">Importer</button></form>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if p.autres %}
+      <details class="mt-2"><summary class="pg-second">Autres versions ({{ p.autres|length }}) : pour un autre pays ou référentiel</summary>
+        <table class="pg-table mt-2"><tbody>
+        {% for l in p.autres %}
+          <tr><td>{{ l.b.titre }}</td><td>{% if l.etat == 'absent' %}
+            <form method="POST" action="{{ url_for('formation_conformite.bib_importer', code=l.b.code) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-secondary">Importer</button></form>{% else %}<span class="badge text-bg-success">Importé</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody></table>
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
+
+  {% call pg.carte('Vos modules', 'Les modules de votre organisation : importés de la bibliothèque ou créés par vous') %}
+    {% if modules %}
+    <table class="pg-table">
+      <thead><tr><th>Module</th><th>Thème</th><th class="pg-num">Durée</th><th class="pg-num">Questions</th><th class="pg-num">Score minimum</th><th>État</th><th></th></tr></thead>
+      <tbody>
+      {% for mod in modules %}
+        <tr>
+          <td class="fw-semibold">{% if gerer %}<a href="{{ url_for('formation_conformite.module_form', mid=mod.id) }}">{{ mod.titre }}</a>{% else %}{{ mod.titre }}{% endif %}
+            {% if mod.version and mod.version > 1 %}<span class="pg-second">version {{ mod.version }}</span>{% endif %}</td>
+          <td class="pg-second">{{ CATEGORIE.get(mod.categorie, '—') }}</td>
+          <td class="pg-num">{{ mod.duree_minutes or '—' }} min</td>
+          <td class="pg-num">{{ (mod.questions or [])|length }}</td>
+          <td class="pg-num">{{ mod.score_min }} %</td>
+          <td>{% if mod.statut == 'publie' %}<span class="badge text-bg-success fc-badge-pub">Publié</span>{% elif mod.statut == 'archive' %}<span class="badge text-bg-dark">Archivé</span>{% else %}<span class="badge text-bg-secondary">Brouillon</span>{% endif %}</td>
+          <td class="text-nowrap"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('formation_conformite.module_apercu', mid=mod.id) }}">Aperçu</a>
+            {% if gerer and mod.statut == 'publie' %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('formation_conformite.campagne_form', module_id=mod.id) }}">Lancer</a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      {{ pg.vide('Aucun module pour l’instant.' ~ (' Créez votre premier module : contenu, puis quiz.' if gerer else ''), 'fa-book-open') }}
+    {% endif %}
+  {% endcall %}
+</div>
+{% endblock %}

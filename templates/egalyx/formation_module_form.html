@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% import "_macros/page.html" as pg %}
+{% set v = saisie or {} %}
+{% block title %}{{ mod.titre if mod else 'Nouveau module' }} — Formations à la conformité{% endblock %}
+{% block styles %}{{ pg.styles() }}<style>
+  .fq-question { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .75rem; background: var(--bs-body-bg); }
+  .fq-tete { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+  .fq-tete strong { font-size: .9rem; }
+  .fq-choix { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+  .fq-choix input[type=text] { flex: 1; }
+  .fq-aide { font-size: .8rem; color: var(--bs-secondary-color); }
+  .fm-format code { font-size: .78rem; }
+</style>{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 960px;">
+  {% if bib %}
+  {{ pg.entete(mod.titre if mod else 'Nouveau module de la bibliothèque', 'fa-book', 'Bibliothèque Egalyx — ' ~ (('version ' ~ mod.version ~ ', ' ~ ('publié pour les clients' if mod.statut == 'publie' else 'brouillon, invisible des clients')) if mod else 'visible par les clients une fois publié'), retour=url_for('formation_conformite.bib_admin')) }}
+  {% else %}
+  {% call pg.entete(mod.titre if mod else 'Nouveau module', 'fa-book-open', ('Version ' ~ mod.version ~ ' — ' ~ ({'publie': 'publié', 'archive': 'archivé'}.get(mod.statut, 'brouillon'))) if mod else 'Contenu à lire ou à regarder, puis quiz', retour=url_for('formation_conformite.accueil')) %}
+    {% if mod %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('formation_conformite.module_apercu', mid=mod.id) }}"><i class="fas fa-eye me-1"></i>Aperçu</a>{% endif %}
+  {% endcall %}
+  {% endif %}
+  {% if maj_bib %}
+  <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2" role="status">
+    <span><strong>Nouvelle version dans la bibliothèque Egalyx</strong> (version {{ maj_bib.version }}, vous avez la version {{ mod.origine_version or 1 }}).
+      La reprendre remplace le texte et le quiz de ce module ; les validations déjà obtenues sont conservées.</span>
+    <form method="POST" action="{{ url_for('formation_conformite.module_mettre_a_jour', mid=mod.id) }}" onsubmit="return confirm('Remplacer le contenu de ce module par la nouvelle version ?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-warning">Reprendre la nouvelle version</button></form>
+  </div>
+  {% elif mod and mod.origine and not bib %}
+  <p class="pg-second"><i class="fas fa-book me-1"></i>Importé de la bibliothèque Egalyx (version {{ mod.origine_version or 1 }}).</p>
+  {% endif %}
+
+  <form method="POST" id="fm" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="questions_json" id="questions_json" value="{{ questions }}">
+    {% call pg.carte('Présentation') %}
+      <div class="row g-3">
+        <div class="col-md-8"><label class="form-label" for="titre">Titre</label>
+          <input class="form-control" id="titre" name="titre" maxlength="200" required value="{{ v.titre if saisie else (mod.titre if mod else '') }}"></div>
+        <div class="col-md-4"><label class="form-label" for="categorie">Thème</label>
+          <select class="form-select" id="categorie" name="categorie">
+            {% set cat = v.categorie if saisie else (mod.categorie if mod else 'autre') %}
+            {% for code, lib in CATEGORIES %}<option value="{{ code }}" {{ 'selected' if cat == code }}>{{ lib }}</option>{% endfor %}
+          </select></div>
+        <div class="col-12"><label class="form-label" for="resume">Résumé <span class="fq-aide">(affiché dans « Mes formations »)</span></label>
+          <textarea class="form-control" id="resume" name="resume" rows="2" maxlength="2000">{{ v.resume if saisie else (mod.resume if mod else '') }}</textarea></div>
+        <div class="col-md-4"><label class="form-label" for="duree_minutes">Durée estimée (minutes)</label>
+          <input class="form-control" type="number" min="1" max="600" id="duree_minutes" name="duree_minutes" value="{{ v.duree_minutes if saisie else (mod.duree_minutes if mod else 15) }}"></div>
+        <div class="col-md-4"><label class="form-label" for="score_min">Score minimum pour valider (%)</label>
+          <input class="form-control" type="number" min="0" max="100" id="score_min" name="score_min" value="{{ v.score_min if saisie else (mod.score_min if mod else 80) }}"></div>
+        {% if bib %}
+        <div class="col-md-4"><label class="form-label" for="code">Code</label>
+          <input class="form-control" id="code" name="code" maxlength="60" {{ 'readonly' if mod }} required value="{{ mod.code if mod else (v.code or '') }}" placeholder="ex. : ci_bases"></div>
+        <div class="col-md-4"><label class="form-label" for="parcours">Parcours</label>
+          <select class="form-select" id="parcours" name="parcours">{% set pc = v.parcours if saisie else (mod.parcours if mod else '') %}
+            <option value="">— Hors parcours —</option>
+            {% for code, (titre, _d) in PARCOURS.items() %}<option value="{{ code }}" {{ 'selected' if pc == code }}>{{ titre }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><label class="form-label" for="ordre">Ordre</label>
+          <input class="form-control" type="number" min="1" max="99" id="ordre" name="ordre" value="{{ v.ordre if saisie else (mod.ordre if mod else 1) }}"></div>
+        <div class="col-md-6"><label class="form-label" for="profil">Proposé en priorité aux organisations</label>
+          <select class="form-select" id="profil" name="profil">{% set pf = v.profil if saisie else (mod.profil if mod else 'tous') %}
+            {% for code, lib in PROFILS.items() %}<option value="{{ code }}" {{ 'selected' if pf == code }}>{{ lib }}</option>{% endfor %}</select></div>
+        {% endif %}
+      </div>
+    {% endcall %}
+
+    {% call pg.carte('Contenu') %}
+      <label class="form-label" for="contenu">Texte du module</label>
+      <textarea class="form-control" id="contenu" name="contenu" rows="14">{{ v.contenu if saisie else (mod.contenu if mod else '') }}</textarea>
+      <p class="fq-aide fm-format mt-2 mb-3">Mise en forme simple : <code>## Titre</code> pour un intertitre, <code>- élément</code> pour une liste,
+        <code>1. étape</code> pour une liste numérotée, <code>**texte**</code> pour du gras, une ligne vide pour un nouveau paragraphe.</p>
+      <label class="form-label" for="video_url">Vidéo (facultatif)</label>
+      <input class="form-control" id="video_url" name="video_url" type="url" placeholder="https://www.youtube.com/watch?v=…" value="{{ v.video_url if saisie else (mod.video_url or '' if mod else '') }}">
+      <p class="fq-aide mt-1 mb-0">Les vidéos YouTube et Vimeo s'affichent dans la page ; les autres liens s'ouvrent dans un nouvel onglet.</p>
+    {% endcall %}
+
+    {% call pg.carte('Quiz', 'Facultatif : sans question, la personne valide par « J’ai lu et compris »') %}
+      <div id="fq-liste" aria-live="polite"></div>
+      <button type="button" class="btn btn-sm btn-outline-primary" id="fq-ajouter"><i class="fas fa-plus me-1"></i>Ajouter une question</button>
+      <p class="fq-aide mt-2 mb-0">Cochez la ou les bonnes réponses. Une question est juste quand la personne coche exactement les bonnes réponses.
+        Les bonnes réponses ne lui sont montrées qu'une fois le module validé.</p>
+    {% endcall %}
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+      {% if not mod or mod.statut != 'publie' %}
+      <button class="btn btn-outline-primary" name="action" value="enregistrer">Enregistrer le brouillon</button>
+      <button class="btn btn-primary" name="action" value="publier">Enregistrer et publier</button>
+      {% else %}<button class="btn btn-primary" name="action" value="enregistrer">Enregistrer les modifications</button>{% endif %}
+    </div>
+    {% if mod and mod.statut == 'publie' %}<p class="fq-aide">{% if bib %}Modifier le texte ou le quiz d'un module publié crée une nouvelle version : les clients qui l'ont importé verront « Nouvelle version disponible » et choisiront de la reprendre.{% else %}Modifier le texte ou le quiz d'un module publié crée une nouvelle version ; les personnes qui l'ont déjà validé gardent leur validation (avec la version suivie).{% endif %}</p>{% endif %}
+  </form>
+
+  {% if mod and bib %}
+  {% call pg.carte('Autres actions') %}
+    <div class="d-flex flex-wrap gap-2">
+      <form method="POST" action="{{ url_for('formation_conformite.bib_etat', bid=mod.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if mod.statut == 'publie' %}<button class="btn btn-sm btn-outline-secondary" name="action" value="retirer">Retirer de la bibliothèque</button>
+        {% else %}<button class="btn btn-sm btn-outline-primary" name="action" value="publier">Publier</button>{% endif %}</form>
+      <form method="POST" action="{{ url_for('formation_conformite.bib_etat', bid=mod.id) }}" onsubmit="return confirm('Supprimer définitivement ce module de la bibliothèque ?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger" name="action" value="supprimer"><i class="fas fa-trash-can me-1"></i>Supprimer</button></form>
+    </div>
+  {% endcall %}
+  {% elif mod %}
+  {% call pg.carte('Autres actions') %}
+    <div class="d-flex flex-wrap gap-2">
+      <form method="POST" action="{{ url_for('formation_conformite.module_etat', mid=mod.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="dupliquer"><i class="fas fa-copy me-1"></i>Dupliquer</button></form>
+      {% if mod.statut != 'archive' %}
+      <form method="POST" action="{{ url_for('formation_conformite.module_etat', mid=mod.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="archiver"><i class="fas fa-box-archive me-1"></i>Archiver</button></form>
+      {% else %}
+      <form method="POST" action="{{ url_for('formation_conformite.module_etat', mid=mod.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-secondary" name="action" value="retablir">Rétablir en brouillon</button></form>
+      {% endif %}
+      <form method="POST" action="{{ url_for('formation_conformite.module_etat', mid=mod.id) }}" onsubmit="return confirm('Supprimer définitivement ce module ?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger" name="action" value="supprimer"><i class="fas fa-trash-can me-1"></i>Supprimer</button></form>
+    </div>
+  {% endcall %}
+  {% endif %}
+</div>
+<script>
+(function () {
+  var liste = document.getElementById('fq-liste'), champ = document.getElementById('questions_json');
+  var questions = [];
+  try { questions = JSON.parse(champ.value || '[]') || []; } catch (e) { questions = []; }
+  function el(tag, attrs, texte) { var e = document.createElement(tag); for (var k in (attrs || {})) e.setAttribute(k, attrs[k]); if (texte) e.textContent = texte; return e; }
+  function lire() {
+    var res = [];
+    liste.querySelectorAll('.fq-question').forEach(function (bloc) {
+      var q = { texte: bloc.querySelector('.fq-texte').value, choix: [], bonnes: [], explication: bloc.querySelector('.fq-expl').value };
+      bloc.querySelectorAll('.fq-choix').forEach(function (ligne, j) {
+        q.choix.push(ligne.querySelector('input[type=text]').value);
+        if (ligne.querySelector('input[type=checkbox]').checked) q.bonnes.push(j);
+      });
+      res.push(q);
+    });
+    return res;
+  }
+  function ligneChoix(bloc, valeur, bonne, n) {
+    var zone = bloc.querySelector('.fq-choix-zone');
+    var j = zone.children.length;
+    var l = el('div', { 'class': 'fq-choix' });
+    var cb = el('input', { type: 'checkbox', 'class': 'form-check-input', 'aria-label': 'Bonne réponse ' + (j + 1) + ' de la question ' + n });
+    cb.checked = !!bonne;
+    var t = el('input', { type: 'text', 'class': 'form-control form-control-sm', maxlength: '300', placeholder: 'Réponse ' + (j + 1), 'aria-label': 'Réponse ' + (j + 1) + ' de la question ' + n });
+    t.value = valeur || '';
+    var x = el('button', { type: 'button', 'class': 'btn btn-sm btn-link text-danger', 'aria-label': 'Retirer la réponse ' + (j + 1) });
+    x.innerHTML = '<i class="fas fa-xmark"></i>';
+    x.addEventListener('click', function () { if (zone.children.length > 2) { l.remove(); } });
+    l.appendChild(cb); l.appendChild(t); l.appendChild(x); zone.appendChild(l);
+  }
+  function dessiner() {
+    liste.innerHTML = '';
+    questions.forEach(function (q, i) {
+      var n = i + 1;
+      var bloc = el('div', { 'class': 'fq-question' });
+      var tete = el('div', { 'class': 'fq-tete' });
+      tete.appendChild(el('strong', {}, 'Question ' + n));
+      var outils = el('div', { 'class': 'd-flex gap-1' });
+      [['fa-arrow-up', 'Monter', -1], ['fa-arrow-down', 'Descendre', 1]].forEach(function (b) {
+        var bt = el('button', { type: 'button', 'class': 'btn btn-sm btn-outline-secondary', 'aria-label': b[1] + ' la question ' + n });
+        bt.innerHTML = '<i class="fas ' + b[0] + '"></i>';
+        bt.addEventListener('click', function () { questions = lire(); var k = i + b[2]; if (k < 0 || k >= questions.length) return; var t = questions[i]; questions[i] = questions[k]; questions[k] = t; dessiner(); });
+        outils.appendChild(bt);
+      });
+      var sup = el('button', { type: 'button', 'class': 'btn btn-sm btn-outline-danger', 'aria-label': 'Supprimer la question ' + n });
+      sup.innerHTML = '<i class="fas fa-trash-can"></i>';
+      sup.addEventListener('click', function () { questions = lire(); questions.splice(i, 1); dessiner(); });
+      outils.appendChild(sup); tete.appendChild(outils); bloc.appendChild(tete);
+      var tx = el('textarea', { 'class': 'form-control form-control-sm fq-texte mb-2', rows: '2', maxlength: '500', placeholder: 'Écrivez la question', 'aria-label': 'Texte de la question ' + n });
+      tx.value = q.texte || ''; bloc.appendChild(tx);
+      bloc.appendChild(el('div', { 'class': 'fq-aide mb-1' }, 'Réponses possibles (cochez la ou les bonnes)'));
+      bloc.appendChild(el('div', { 'class': 'fq-choix-zone' }));
+      var choix = (q.choix && q.choix.length) ? q.choix : ['', ''];
+      choix.forEach(function (c, j) { ligneChoix(bloc, c, (q.bonnes || []).indexOf(j) >= 0, n); });
+      var aj = el('button', { type: 'button', 'class': 'btn btn-sm btn-link px-0' }, '+ Ajouter une réponse');
+      aj.addEventListener('click', function () { if (bloc.querySelector('.fq-choix-zone').children.length < {{ 8 }}) ligneChoix(bloc, '', false, n); });
+      bloc.appendChild(aj);
+      var ex = el('input', { type: 'text', 'class': 'form-control form-control-sm fq-expl mt-1', maxlength: '800', placeholder: 'Explication montrée après validation (facultatif)', 'aria-label': 'Explication de la question ' + n });
+      ex.value = q.explication || ''; bloc.appendChild(ex);
+      liste.appendChild(bloc);
+    });
+  }
+  document.getElementById('fq-ajouter').addEventListener('click', function () {
+    questions = lire(); questions.push({ texte: '', choix: ['', ''], bonnes: [] }); dessiner();
+    var d = liste.querySelectorAll('.fq-texte'); if (d.length) d[d.length - 1].focus();
+  });
+  document.getElementById('fm').addEventListener('submit', function () { champ.value = JSON.stringify(lire()); });
+  dessiner();
+})();
+</script>
+{% endblock %}

@@ -21923,3 +21923,88 @@ class ExecutionAnalyseProgrammee(db.Model):
     nouvelles = db.Column(db.Integer, default=0)
     suites = db.Column(db.JSON)                                    # planification N2, mesures KRI, notifications
     par_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+
+# ============================================================================ formation à la conformité (e-learning)
+class ModuleFormationConformite(db.Model):
+    """Module de formation (egalyx/formation_conformite.py) : contenu à lire ou à regarder, puis quiz noté.
+    questions = [{'texte', 'choix': [..], 'bonnes': [indices], 'explication'}]."""
+    __tablename__ = 'formation_modules'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    titre = db.Column(db.String(200), nullable=False)
+    resume = db.Column(db.Text)
+    contenu = db.Column(db.Text)                       # texte simple : paragraphes, listes « - », titres « ## »
+    video_url = db.Column(db.String(500))
+    categorie = db.Column(db.String(50))
+    duree_minutes = db.Column(db.Integer, default=15)
+    score_min = db.Column(db.Integer, default=80)      # % de bonnes réponses pour valider
+    questions = db.Column(db.JSON, default=list)
+    statut = db.Column(db.String(20), default='brouillon')   # brouillon | publie | archive
+    version = db.Column(db.Integer, default=1)
+    origine = db.Column(db.String(60))                 # code du modèle de la bibliothèque, s'il vient de là
+    origine_version = db.Column(db.Integer)            # version de la bibliothèque importée
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CampagneFormationConformite(db.Model):
+    """Campagne : un module, des personnes concernées, une date limite."""
+    __tablename__ = 'formation_campagnes'
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    module_id = db.Column(db.Integer, db.ForeignKey('formation_modules.id'), nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text)
+    date_limite = db.Column(db.Date)
+    cible = db.Column(db.JSON)                         # {'type': 'tous'|'directions'|'roles'|'utilisateurs', 'valeurs': [...]}
+    statut = db.Column(db.String(20), default='active')      # active | close
+    derniere_relance = db.Column(db.DateTime)
+    relances_auto = db.Column(db.Boolean, default=True)          # rappels J-7, J-1, J+1, J+7 (notification + e-mail)
+    derniere_relance_auto = db.Column(db.String(40))             # « etape:date » : réservation (un seul envoi, même à plusieurs serveurs)
+    kri_id = db.Column(db.Integer, db.ForeignKey('kri.id'), nullable=True)   # KRI alimenté : % de personnes n'ayant pas validé
+    derniere_mesure_kri = db.Column(db.Date)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AffectationFormationConformite(db.Model):
+    """Une personne dans une campagne : statut, tentatives, scores."""
+    __tablename__ = 'formation_affectations'
+    __table_args__ = (db.UniqueConstraint('campagne_id', 'user_id', name='uq_formation_affectation'),)
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False, index=True)
+    campagne_id = db.Column(db.Integer, db.ForeignKey('formation_campagnes.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    statut = db.Column(db.String(20), default='a_faire')     # a_faire | en_cours | reussi
+    tentatives = db.Column(db.Integer, default=0)
+    meilleur_score = db.Column(db.Integer)
+    dernier_score = db.Column(db.Integer)
+    debut_le = db.Column(db.DateTime)
+    reussi_le = db.Column(db.DateTime)
+    version_module = db.Column(db.Integer)
+    historique = db.Column(db.JSON, default=list)     # [{'le', 'score', 'reussi'}]
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ModuleBibliothequeFormation(db.Model):
+    """Bibliothèque Egalyx de formation : modules gérés par le super admin, importés (copiés) par les clients."""
+    __tablename__ = 'formation_bibliotheque'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(60), unique=True, nullable=False)
+    titre = db.Column(db.String(200), nullable=False)
+    resume = db.Column(db.Text)
+    contenu = db.Column(db.Text)
+    video_url = db.Column(db.String(500))
+    categorie = db.Column(db.String(50))
+    duree_minutes = db.Column(db.Integer, default=15)
+    score_min = db.Column(db.Integer, default=80)
+    questions = db.Column(db.JSON, default=list)
+    parcours = db.Column(db.String(40))
+    ordre = db.Column(db.Integer, default=1)
+    profil = db.Column(db.String(20), default='tous')            # tous | uemoa | france
+    version = db.Column(db.Integer, default=1)
+    statut = db.Column(db.String(20), default='publie')          # brouillon | publie
+    updated_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
