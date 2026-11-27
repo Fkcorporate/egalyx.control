@@ -41,15 +41,23 @@ def _exiger_super_admin():
 
 # ====================================================================== bibliothèque : amorçage
 def amorcer(app):
-    """Copie dans la base les modules de formation_bibliotheque.py absents (par code). N'écrase jamais une modification."""
+    """Copie dans la base les modules de formation_bibliotheque.py absents (par code) et met à jour ceux que personne n'a
+    modifiés à l'écran (nouvelle version). N'écrase jamais une modification faite par le super admin."""
     m = _m()
     try:
         with app.app_context():
             m.ModuleBibliothequeFormation.__table__.create(m.db.engine, checkfirst=True)
-            presents = {c for (c,) in m.db.session.query(m.ModuleBibliothequeFormation.code)}
+            presents = {b.code: b for b in m.ModuleBibliothequeFormation.query}
             ajouts = 0
             for x in fb.MODULES:
-                if x['code'] in presents:
+                b = presents.get(x['code'])
+                if b is not None:
+                    # Jamais modifié à l'écran (updated_by vide) et contenu du fichier enrichi : nouvelle version, que les
+                    # clients reprennent s'ils le souhaitent. Un module modifié par le super admin n'est jamais touché.
+                    if b.updated_by is None and (b.titre, b.resume, b.contenu, b.questions) != (x['titre'], x['resume'], x['contenu'], x['questions']):
+                        b.titre, b.resume, b.contenu, b.questions = x['titre'], x['resume'], x['contenu'], x['questions']
+                        b.version = (b.version or 1) + 1
+                        ajouts += 1
                     continue
                 m.db.session.add(m.ModuleBibliothequeFormation(
                     code=x['code'], titre=x['titre'], resume=x['resume'], contenu=x['contenu'], categorie=x['categorie'],

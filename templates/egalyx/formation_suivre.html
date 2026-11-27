@@ -1,81 +1,304 @@
 {% extends "base.html" %}
-{% import "_macros/page.html" as pg %}
 {% block title %}{{ mod.titre }}{% endblock %}
-{% block styles %}{{ pg.styles() }}<style>
-  .fs-texte { max-width: 46rem; font-size: 1rem; line-height: 1.7; }
-  .fs-texte h3 { font-size: 1.1rem; font-weight: 650; margin: 1.4rem 0 .5rem; }
-  .fs-texte ul, .fs-texte ol { padding-left: 1.3rem; }
-  .fs-video { position: relative; aspect-ratio: 16 / 9; max-width: 46rem; border-radius: 10px; overflow: hidden; background: #000; }
-  .fs-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .fs-q { border: 1px solid var(--bs-border-color); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .75rem; }
-  .fs-q legend { font-size: .98rem; font-weight: 600; margin-bottom: .5rem; float: left; width: 100%; padding: 0; }
-  .fs-q legend + * { clear: left; }
-  .fs-q.juste { border-color: var(--bs-success); }
-  .fs-q.faux { border-color: var(--bs-danger); }
-  .fs-verdict { font-size: .85rem; margin-top: .4rem; }
-  .fs-resultat { border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-</style>{% endblock %}
+{% block styles %}{% include "egalyx/_formation_styles.html" %}{% endblock %}
 {% block content %}
 {% set qs = mod.questions or [] %}
 {% set valide = a and a.statut == 'reussi' %}
-<div class="container" style="max-width: 900px;">
-  {% if apercu %}
-    {{ pg.entete(mod.titre, 'fa-eye', 'Aperçu : c’est ce que verront les participants (le quiz ne peut pas être envoyé ici)', retour=url_for('formation_conformite.accueil')) }}
-  {% else %}
-    {{ pg.entete(c.titre, 'fa-graduation-cap', mod.titre ~ (' — à faire avant le ' ~ c.date_limite.strftime('%d/%m/%Y') if c.date_limite and not valide else ''), retour=url_for('formation_conformite.mes_formations'), libelle_retour='Mes formations') }}
-  {% endif %}
+{% set th = formation_theme(mod.categorie) %}
+{% set etapes = (['Vidéo'] if video or mod.video_url else []) + (chapitres|map(attribute='titre')|list) + ['Quiz' if qs else 'Validation'] %}
+{% set jours = ((c.date_limite - today).days) if c and c.date_limite else none %}
+<div class="container fx" style="max-width: 1180px; --fc: {{ th.couleur }}; --fc2: {{ th.clair }};" id="fx-racine"
+     data-aid="{{ a.id if a else '' }}" data-resultat="{{ '1' if resultat else '' }}" data-reussi="{{ '1' if resultat and resultat.reussi else '' }}">
 
-  {% if resultat %}
-    <div class="fs-resultat {{ 'bg-success-subtle' if resultat.reussi else 'bg-warning-subtle' }}" role="status">
-      <strong>{{ 'Formation validée' if resultat.reussi else 'Pas encore validée' }}</strong> : {{ resultat.score }} % de bonnes réponses
-      (minimum demandé : {{ mod.score_min }} %).
-      {% if not resultat.reussi %}Relisez le contenu, puis réessayez : les questions à revoir sont signalées ci-dessous.
-      {% else %}<a class="ms-2" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf me-1"></i>Télécharger l’attestation</a>{% endif %}
+  <section class="fx-couv fx-hero">
+    <div class="fx-hero-grille">
+      <div>
+        {% if apercu %}
+          <a class="fx-retour" href="{{ url_for('formation_conformite.accueil') }}"><i class="fas fa-arrow-left" aria-hidden="true"></i>Formations à la conformité</a>
+        {% else %}
+          <a class="fx-retour" href="{{ url_for('formation_conformite.mes_formations') }}"><i class="fas fa-arrow-left" aria-hidden="true"></i>Mes formations</a>
+        {% endif %}
+        <div class="d-flex flex-wrap gap-2">
+          <span class="fx-puce"><i class="fas {{ th.icone }}" aria-hidden="true"></i>{{ CATEGORIE.get(mod.categorie, 'Formation') }}</span>
+          {% if apercu %}<span class="fx-puce"><i class="fas fa-eye" aria-hidden="true"></i>Aperçu</span>{% endif %}
+          {% if valide %}<span class="fx-puce"><i class="fas fa-circle-check" aria-hidden="true"></i>Validée</span>{% endif %}
+        </div>
+        <h1>{{ mod.titre }}</h1>
+        {% if mod.resume %}<p class="fx-sous">{{ mod.resume }}</p>{% endif %}
+        <div class="fx-meta">
+          <span><i class="far fa-clock" aria-hidden="true"></i>{{ mod.duree_minutes or 10 }} min</span>
+          <span><i class="fas fa-layer-group" aria-hidden="true"></i>{{ chapitres|length }} chapitre{{ 's' if chapitres|length > 1 }}</span>
+          {% if qs %}<span><i class="fas fa-list-check" aria-hidden="true"></i>{{ qs|length }} questions — {{ mod.score_min }} % pour valider</span>{% endif %}
+          {% if jours is not none and not valide %}
+            <span><i class="far fa-calendar" aria-hidden="true"></i>{% if jours < 0 %}En retard de {{ -jours }} jour{{ 's' if -jours > 1 }}{% elif jours == 0 %}À valider aujourd’hui{% else %}À valider avant le {{ c.date_limite.strftime('%d/%m/%Y') }} (J-{{ jours }}){% endif %}</span>
+          {% endif %}
+        </div>
+      </div>
+      {{ formation_illustration(mod.categorie, 'fx-dessin') }}
     </div>
-  {% elif valide %}
-    <div class="fs-resultat bg-success-subtle" role="status"><strong>Formation validée</strong> le {{ pg.date(a.reussi_le, True) }}{% if a.meilleur_score is not none and qs %}, meilleur score {{ a.meilleur_score }} %{% endif %}.
-      <a class="ms-2" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf me-1"></i>Télécharger l’attestation</a></div>
+    <div class="fx-barre" aria-hidden="true"><span id="fx-barre"></span></div>
+    <div class="fx-hero-pied"><span id="fx-pos-haut">{{ etapes|length }} étapes</span><span>{{ c.titre if c else '' }}</span></div>
+  </section>
+
+  {% if c and c.message and not valide %}
+  <div class="alert alert-light border d-flex gap-2 align-items-start"><i class="fas fa-bullhorn mt-1" style="color: var(--fc);" aria-hidden="true"></i><div>{{ c.message }}</div></div>
   {% endif %}
 
-  {% if c and c.message and not valide %}{% call pg.carte() %}<div class="small">{{ c.message }}</div>{% endcall %}{% endif %}
+  <div class="fx-lecteur">
+    <nav class="fx-plan" aria-label="Étapes de la formation">
+      <p>Votre progression</p>
+      <ol>
+        {% for e in etapes %}
+        <li><button type="button" data-aller="{{ loop.index0 }}"><span class="fx-num"><span>{{ loop.index }}</span></span><span>{{ e }}</span></button></li>
+        {% endfor %}
+      </ol>
+    </nav>
 
-  {% call pg.carte('Contenu') %}
-    {% if mod.resume %}<p class="fw-semibold">{{ mod.resume }}</p>{% endif %}
-    {% if video %}<div class="fs-video mb-3"><iframe src="{{ video }}" title="Vidéo : {{ mod.titre }}" allow="fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>
-    {% elif mod.video_url %}<p><a href="{{ mod.video_url }}" target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-1"></i>Ouvrir la vidéo</a></p>{% endif %}
-    <div class="fs-texte">{{ contenu }}</div>
-  {% endcall %}
-
-  {% if qs %}
-  {% call pg.carte('Quiz', qs|length ~ ' question' ~ ('s' if qs|length > 1) ~ ' — ' ~ mod.score_min ~ ' % de bonnes réponses pour valider') %}
-    <form method="POST" action="{{ url_for('formation_conformite.suivre', aid=a.id) if a else '#' }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% for q in qs %}{% set i = loop.index0 %}
-        {% set multi = q.bonnes|length > 1 %}
-        {% set coches = (resultat.reponses[i] if resultat else (choisis[i] if choisis else [])) or [] %}
-        <fieldset class="fs-q {{ ('juste' if resultat.justes[i] else 'faux') if resultat }}">
-          <legend>{{ loop.index }}. {{ q.texte }}{% if multi %} <span class="text-secondary small fw-normal">(plusieurs réponses)</span>{% endif %}</legend>
-          {% for ch in q.choix %}
-          <div class="form-check">
-            <input class="form-check-input" type="{{ 'checkbox' if multi else 'radio' }}" name="q{{ i }}" id="q{{ i }}_{{ loop.index0 }}" value="{{ loop.index0 }}"
-                   {{ 'checked' if loop.index0 in coches }} {{ 'disabled' if apercu }}>
-            <label class="form-check-label" for="q{{ i }}_{{ loop.index0 }}">{{ ch }}{% if valide and loop.index0 in q.bonnes %} <span class="badge text-bg-success ms-1">bonne réponse</span>{% endif %}</label>
-          </div>
-          {% endfor %}
-          {% if resultat %}<div class="fs-verdict {{ 'text-success-emphasis' if resultat.justes[i] else 'text-danger-emphasis' }}">{{ 'Juste' if resultat.justes[i] else 'À revoir' }}</div>{% endif %}
-          {% if valide and q.explication %}<div class="fs-verdict text-secondary">{{ q.explication }}</div>{% endif %}
-        </fieldset>
-      {% endfor %}
-      {% if not apercu and not valide and c.statut == 'active' %}
-        <button class="btn btn-primary">Valider mes réponses</button>
+    <div class="fx-scene" id="fx-scene">
+      {% set n = namespace(i=0) %}
+      {% if video or mod.video_url %}
+      <section class="fx-etape" data-etape aria-labelledby="fx-t{{ n.i }}">
+        <p class="fx-kicker">Pour commencer</p>
+        <h2 id="fx-t{{ n.i }}" tabindex="-1">Vidéo</h2>
+        {% if video %}<div class="fx-video"><iframe src="{{ video }}" title="Vidéo : {{ mod.titre }}" allow="fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>
+        {% else %}<p><a class="fx-btn" href="{{ mod.video_url }}" target="_blank" rel="noopener noreferrer"><i class="fas fa-play" aria-hidden="true"></i>Ouvrir la vidéo</a></p>{% endif %}
+      </section>
+      {% set n.i = n.i + 1 %}
       {% endif %}
-    </form>
-  {% endcall %}
-  {% elif not apercu and not valide and c.statut == 'active' %}
-    <form method="POST" action="{{ url_for('formation_conformite.valider_sans_quiz', aid=a.id) }}" class="mb-4">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-primary"><i class="fas fa-check me-1"></i>J'ai lu et compris</button>
-    </form>
-  {% endif %}
+
+      {% for ch in chapitres %}
+      <section class="fx-etape" data-etape aria-labelledby="fx-t{{ n.i }}">
+        <p class="fx-kicker">Chapitre {{ loop.index }} sur {{ chapitres|length }}</p>
+        <h2 id="fx-t{{ n.i }}" tabindex="-1">{{ ch.titre }}</h2>
+        <div class="fx-texte">{{ ch.html }}</div>
+      </section>
+      {% set n.i = n.i + 1 %}
+      {% endfor %}
+
+      <section class="fx-etape" data-etape data-quiz aria-labelledby="fx-t{{ n.i }}">
+        {% if resultat %}
+          <div class="fx-resultat {{ 'ok' if resultat.reussi else 'ko' }}" role="status">
+            <canvas class="fx-confettis" id="fx-confettis" aria-hidden="true"></canvas>
+            <div class="fx-anneau" style="--s: 0;" data-score="{{ resultat.score }}">
+              <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="fond" cx="60" cy="60" r="52"/><circle class="val" cx="60" cy="60" r="52"/></svg>
+              <b><span id="fx-compteur">{{ resultat.score }}</span><small>&nbsp;%</small></b>
+            </div>
+            <div>
+              <h2 id="fx-t{{ n.i }}" tabindex="-1">{{ 'Bravo, formation validée !' if resultat.reussi else 'Presque : encore un effort' }}</h2>
+              <p>{{ resultat.score }} % de bonnes réponses (minimum demandé : {{ mod.score_min }} %).
+                {% if not resultat.reussi %}Relisez les chapitres, puis réessayez : les questions à revoir sont signalées ci-dessous.{% endif %}</p>
+              {% if resultat.reussi %}
+                <a class="fx-btn" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf" aria-hidden="true"></i>Télécharger l’attestation</a>
+                <a class="fx-btn secondaire ms-1" href="{{ url_for('formation_conformite.mes_formations') }}">Mes formations</a>
+              {% else %}
+                <button type="button" class="fx-btn" id="fx-reessayer"><i class="fas fa-rotate-right" aria-hidden="true"></i>Réessayer le quiz</button>
+                <button type="button" class="fx-btn secondaire ms-1" data-aller="0">Relire depuis le début</button>
+              {% endif %}
+            </div>
+          </div>
+        {% elif valide %}
+          <div class="fx-resultat ok" role="status">
+            <div class="fx-anneau" style="--s: {{ a.meilleur_score if a.meilleur_score is not none else 100 }};">
+              <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="fond" cx="60" cy="60" r="52"/><circle class="val" cx="60" cy="60" r="52"/></svg>
+              <b>{{ a.meilleur_score if a.meilleur_score is not none else 100 }}<small>&nbsp;%</small></b>
+            </div>
+            <div>
+              <h2 id="fx-t{{ n.i }}" tabindex="-1">Formation validée</h2>
+              <p>Le {{ a.reussi_le.strftime('%d/%m/%Y à %H:%M') if a.reussi_le else '' }}{% if qs %} — les bonnes réponses sont indiquées ci-dessous{% endif %}.</p>
+              <a class="fx-btn" href="{{ url_for('formation_conformite.attestation', aid=a.id) }}"><i class="fas fa-file-pdf" aria-hidden="true"></i>Télécharger l’attestation</a>
+            </div>
+          </div>
+        {% else %}
+          <p class="fx-kicker">Dernière étape</p>
+          <h2 id="fx-t{{ n.i }}" tabindex="-1">{{ 'Vérifiez vos connaissances' if qs else 'Validation' }}</h2>
+        {% endif %}
+
+        {% if qs %}
+        {% set mode_pas = not resultat and not valide and not apercu %}
+        <form method="POST" action="{{ url_for('formation_conformite.suivre', aid=a.id) if a else '#' }}" id="fx-quiz" class="{{ 'fx-quiz-pas' if mode_pas }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% for q in qs %}{% set i = loop.index0 %}
+            {% set multi = q.bonnes|length > 1 %}
+            {% set coches = (resultat.reponses[i] if resultat else (choisis[i] if choisis else [])) or [] %}
+            <fieldset class="fx-q {{ ('juste' if resultat.justes[i] else 'faux') if resultat }}" data-q="{{ i }}">
+              <legend>{{ q.texte }}</legend>
+              <p class="fx-aide">Question {{ loop.index }} sur {{ qs|length }}{{ ' — plusieurs réponses possibles' if multi else '' }}</p>
+              <div class="fx-choix">
+                {% for ch in q.choix %}
+                <label for="q{{ i }}_{{ loop.index0 }}">
+                  <input type="{{ 'checkbox' if multi else 'radio' }}" name="q{{ i }}" id="q{{ i }}_{{ loop.index0 }}" value="{{ loop.index0 }}"
+                         {{ 'checked' if loop.index0 in coches }} {{ 'disabled' if apercu or valide }}>
+                  <span>{{ ch }}</span>
+                  {% if valide and loop.index0 in q.bonnes %}<span class="bonne">bonne réponse</span>{% else %}<span></span>{% endif %}
+                </label>
+                {% endfor %}
+              </div>
+              {% if resultat %}<div class="fx-verdict"><i class="fas {{ 'fa-check' if resultat.justes[i] else 'fa-xmark' }} me-1" aria-hidden="true"></i>{{ 'Juste' if resultat.justes[i] else 'À revoir' }}</div>{% endif %}
+              {% if valide and q.explication %}<div class="fx-explication">{{ q.explication }}</div>{% endif %}
+            </fieldset>
+          {% endfor %}
+          {% if not apercu and not valide and c.statut == 'active' %}
+          <div class="fx-quiz-actions">
+            <button type="button" class="fx-btn secondaire fx-precedente-q">Question précédente</button>
+            <span>
+              <button type="button" class="fx-btn fx-suivante" disabled>Question suivante <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+              <button class="fx-btn fx-envoi"><i class="fas fa-paper-plane" aria-hidden="true"></i>Valider mes réponses</button>
+            </span>
+          </div>
+          {% elif apercu %}<p class="text-secondary small mb-0">Aperçu : le quiz ne peut pas être envoyé ici.</p>{% endif %}
+        </form>
+        {% elif not apercu and not valide and c.statut == 'active' %}
+          <p class="fx-texte">Vous avez parcouru tout le contenu. Confirmez votre lecture pour valider la formation.</p>
+          <form method="POST" action="{{ url_for('formation_conformite.valider_sans_quiz', aid=a.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="fx-btn"><i class="fas fa-check" aria-hidden="true"></i>J'ai lu et compris</button>
+          </form>
+        {% endif %}
+      </section>
+
+      <div class="fx-nav">
+        <button type="button" class="fx-btn secondaire" id="fx-prec"><i class="fas fa-arrow-left" aria-hidden="true"></i>Précédent</button>
+        <span class="fx-pos" id="fx-pos" aria-live="polite"></span>
+        <button type="button" class="fx-btn" id="fx-suiv">Suivant <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<script>
+(function () {
+  var racine = document.getElementById('fx-racine');
+  var scene = document.getElementById('fx-scene');
+  var etapes = Array.prototype.slice.call(scene.querySelectorAll('[data-etape]'));
+  var boutons = Array.prototype.slice.call(document.querySelectorAll('.fx-plan [data-aller]'));
+  var prec = document.getElementById('fx-prec'), suiv = document.getElementById('fx-suiv');
+  var pos = document.getElementById('fx-pos'), posHaut = document.getElementById('fx-pos-haut'), barre = document.getElementById('fx-barre');
+  var calme = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cle = racine.dataset.aid ? 'fx-etape-' + racine.dataset.aid : null;
+  var vues = {}, courant = -1;
+  racine.classList.add('fx-js');
+
+  function memoriser(i) { if (!cle) return; try { localStorage.setItem(cle, String(i)); } catch (e) {} }
+  function relire() { if (!cle) return 0; try { var v = parseInt(localStorage.getItem(cle), 10); return isNaN(v) ? 0 : v; } catch (e) { return 0; } }
+
+  function aller(i, focus) {
+    i = Math.max(0, Math.min(etapes.length - 1, i));
+    var arriere = i < courant;
+    etapes.forEach(function (e, k) { e.hidden = k !== i; e.classList.remove('entre', 'entre-arriere'); });
+    if (courant !== -1 && !calme) { void etapes[i].offsetWidth; etapes[i].classList.add(arriere ? 'entre-arriere' : 'entre'); }
+    courant = i; vues[i] = true; memoriser(i);
+    boutons.forEach(function (b, k) {
+      if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+      b.parentNode.classList.toggle('vu', !!vues[k] && k !== i);
+    });
+    if (window.innerWidth < 992 && boutons[i]) { try { boutons[i].scrollIntoView({ block: 'nearest', inline: 'center', behavior: calme ? 'auto' : 'smooth' }); } catch (e) {} }
+    prec.disabled = i === 0;
+    suiv.hidden = i === etapes.length - 1;
+    var texte = 'Étape ' + (i + 1) + ' sur ' + etapes.length;
+    pos.textContent = texte; posHaut.textContent = texte;
+    barre.style.setProperty('--p', Math.round(100 * (i + 1) / etapes.length) + '%');
+    if (focus) {
+      var t = etapes[i].querySelector('h2');
+      if (t) t.focus({ preventScroll: true });
+      var haut = scene.getBoundingClientRect().top + window.pageYOffset - 90;
+      if (window.pageYOffset > haut) window.scrollTo({ top: haut, behavior: calme ? 'auto' : 'smooth' });
+    }
+  }
+  prec.addEventListener('click', function () { aller(courant - 1, true); });
+  suiv.addEventListener('click', function () { aller(courant + 1, true); });
+  document.querySelectorAll('[data-aller]').forEach(function (b) {
+    b.addEventListener('click', function () { aller(parseInt(b.dataset.aller, 10), true); });
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (/INPUT|TEXTAREA|SELECT/.test(ev.target.tagName || '') || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    if (ev.key === 'ArrowRight' && courant < etapes.length - 1) aller(courant + 1, true);
+    if (ev.key === 'ArrowLeft' && courant > 0) aller(courant - 1, true);
+  });
+
+  /* ---------- quiz : une question à la fois ---------- */
+  var quiz = document.getElementById('fx-quiz');
+  function lancerPas() {
+    if (!quiz) return;
+    quiz.classList.add('fx-quiz-pas');
+    var qs = Array.prototype.slice.call(quiz.querySelectorAll('.fx-q'));
+    var points = quiz.querySelector('.fx-points');
+    if (!points) {
+      points = document.createElement('div'); points.className = 'fx-points'; points.setAttribute('aria-hidden', 'true');
+      qs.forEach(function () { points.appendChild(document.createElement('span')); });
+      quiz.insertBefore(points, qs[0]);
+    }
+    var pts = points.querySelectorAll('span');
+    var suivante = quiz.querySelector('.fx-suivante'), precedente = quiz.querySelector('.fx-precedente-q');
+    var q = 0;
+    function repondu(k) { return !!qs[k].querySelector('input:checked'); }
+    function montrer(k, focus) {
+      q = k;
+      qs.forEach(function (f, j) { f.classList.toggle('actif', j === k); });
+      pts.forEach(function (p, j) { p.className = j === k ? 'actif' : (repondu(j) ? 'fait' : ''); });
+      quiz.classList.toggle('fin', k === qs.length - 1);
+      if (suivante) suivante.disabled = !repondu(k);
+      if (precedente) precedente.style.visibility = k === 0 ? 'hidden' : 'visible';
+      if (focus) { var l = qs[k].querySelector('legend'); if (l) { l.setAttribute('tabindex', '-1'); l.focus({ preventScroll: true }); } }
+    }
+    quiz.addEventListener('change', function () { if (suivante) suivante.disabled = !repondu(q); });
+    if (suivante) suivante.addEventListener('click', function () { if (repondu(q) && q < qs.length - 1) montrer(q + 1, true); });
+    if (precedente) precedente.addEventListener('click', function () { if (q > 0) montrer(q - 1, true); });
+    quiz.addEventListener('submit', function (ev) {
+      var manque = -1;
+      qs.forEach(function (f, j) { if (manque < 0 && !repondu(j)) manque = j; });
+      if (manque >= 0) { ev.preventDefault(); montrer(manque, true); }
+    });
+    montrer(0, false);
+  }
+  if (quiz && quiz.classList.contains('fx-quiz-pas')) lancerPas();
+  var reessayer = document.getElementById('fx-reessayer');
+  if (reessayer) reessayer.addEventListener('click', function () {
+    quiz.querySelectorAll('input[type=radio], input[type=checkbox]').forEach(function (x) { x.checked = false; });
+    quiz.querySelectorAll('.fx-q').forEach(function (f) { f.classList.remove('juste', 'faux'); var v = f.querySelector('.fx-verdict'); if (v) v.remove(); });
+    var res = scene.querySelector('.fx-resultat'); if (res) res.remove();
+    lancerPas();
+  });
+
+  /* ---------- résultat : anneau, compteur, confettis ---------- */
+  var anneau = scene.querySelector('.fx-anneau[data-score]');
+  if (anneau) {
+    var score = parseInt(anneau.dataset.score, 10) || 0, cpt = document.getElementById('fx-compteur');
+    if (calme) { anneau.style.setProperty('--s', score); }
+    else {
+      cpt.textContent = '0';
+      requestAnimationFrame(function () { requestAnimationFrame(function () { anneau.style.setProperty('--s', score); }); });
+      var t0 = null;
+      requestAnimationFrame(function pas(t) { if (!t0) t0 = t; var p = Math.min(1, (t - t0) / 1300);
+        cpt.textContent = Math.round(score * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(pas); });
+    }
+  }
+  function confettis() {
+    var cv = document.getElementById('fx-confettis'); if (!cv || calme) return;
+    var r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    cv.width = r.width * dpr; cv.height = r.height * dpr;
+    var ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    var couleurs = [getComputedStyle(racine).getPropertyValue('--fc').trim() || '#1D4ED8', '#16a34a', '#f59e0b', '#ec4899', '#38bdf8'];
+    var bouts = [];
+    for (var i = 0; i < 90; i++) bouts.push({ x: 80, y: r.height / 2, vx: 2 + Math.random() * 7, vy: -7 + Math.random() * 8, rot: Math.random() * 6,
+      vr: -.2 + Math.random() * .4, w: 5 + Math.random() * 5, h: 3 + Math.random() * 4, c: couleurs[i % couleurs.length] });
+    var debut = null;
+    requestAnimationFrame(function anime(t) {
+      if (!debut) debut = t;
+      var e = t - debut; ctx.clearRect(0, 0, r.width, r.height);
+      bouts.forEach(function (b) { b.vy += .18; b.vx *= .99; b.x += b.vx; b.y += b.vy; b.rot += b.vr;
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - e / 2200); ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.fillStyle = b.c;
+        ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); ctx.restore(); });
+      if (e < 2200) requestAnimationFrame(anime); else ctx.clearRect(0, 0, r.width, r.height);
+    });
+  }
+
+  /* ---------- départ ---------- */
+  var depart = racine.dataset.resultat ? etapes.length - 1 : Math.min(relire(), etapes.length - 1);
+  aller(depart, false);
+  if (racine.dataset.resultat) {
+    var h = scene.querySelector('.fx-resultat h2'); if (h) h.focus();
+    if (racine.dataset.reussi) setTimeout(confettis, 250);
+  }
+})();
+</script>
 {% endblock %}

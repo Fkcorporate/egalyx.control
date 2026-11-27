@@ -104,7 +104,7 @@ r = appel(admin, 'post', '/formation-conformite/module/nouveau', data={
 verif('lien de vidéo non https : refusé', 'doit commencer par https://'.encode() in r.data)
 r = appel(admin, 'get', f'/formation-conformite/module/{MID}/apercu')
 t = r.data.decode(errors='ignore')
-verif('aperçu : texte mis en forme (intertitre, gras, liste)', r.status_code == 200 and '<h3>Pourquoi</h3>' in t
+verif('aperçu : texte mis en forme (chapitre, gras, liste)', r.status_code == 200 and 'tabindex="-1">Pourquoi</h2>' in t
       and '<strong>finance</strong>' in t and '<li>point un</li>' in t)
 verif('aperçu : HTML du contenu neutralisé (pas de script injecté)', '<script>alert(1)</script>' not in t and '&lt;script&gt;' in t)
 verif('aperçu : vidéo YouTube intégrée en mode sans cookies', 'youtube-nocookie.com/embed/dQw4w9WgXcQ' in t)
@@ -168,7 +168,7 @@ with A.app.app_context():
     a = db.session.get(M.AffectationFormationConformite, AID)
     verif('50 % pour un minimum de 100 % : non validé, tentative comptée', a.statut == 'en_cours' and a.tentatives == 1 and a.dernier_score == 50)
 verif('résultat : « Pas encore validée », question à revoir signalée, réponses toujours cachées',
-      'Pas encore validée' in t and 'À revoir' in t and 'bonne réponse' not in t)
+      'Presque : encore un effort' in t and 'À revoir' in t and 'bonne réponse' not in t)
 r = appel(lect, 'post', f'/formation-conformite/suivre/{AID}', data={'csrf_token': jeton(lect, f'/formation-conformite/suivre/{AID}'),
                                                                      'q0': '0', 'q1': ['0', '1']})
 t = r.data.decode(errors='ignore')
@@ -176,7 +176,7 @@ with A.app.app_context():
     a = db.session.get(M.AffectationFormationConformite, AID)
     verif('100 % : validé, horodaté, version du module notée', a.statut == 'reussi' and a.reussi_le is not None and a.meilleur_score == 100
           and a.version_module == 1 and a.tentatives == 2 and len(a.historique) == 2)
-verif('après validation : bonnes réponses et explications visibles', 'Formation validée' in t and 'bonne réponse' in t
+verif('après validation : bonnes réponses et explications visibles', 'formation validée' in t.lower() and 'bonne réponse' in t
       and 'cellule de renseignement' in t)
 r = appel(admin, 'get', f'/formation-conformite/campagne/{KID}')
 verif('suivi : 1 validé sur 2 (50 %)', '1 (50 %)'.encode() in r.data)

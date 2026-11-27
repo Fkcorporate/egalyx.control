@@ -2,11 +2,14 @@
 egalyx/formation_bibliotheque.py — contenu initial de la bibliothèque Egalyx de formation (e-learning).
 
 Ces modules sont copiés UNE FOIS dans la table formation_bibliotheque au démarrage (par code, s'ils n'y sont pas).
-Ensuite, c'est le super admin qui les modifie et les publie depuis « Super admin > Bibliothèque de formation » :
-ce fichier n'écrase jamais une modification faite à l'écran.
+Ensuite, c'est le super admin qui les modifie et les publie depuis « Super admin > Bibliothèque de formation ».
+Si ce fichier évolue, les modules que personne n'a modifiés à l'écran passent à la version suivante au démarrage ;
+un module modifié par le super admin n'est jamais écrasé.
+Mise en forme : « > À retenir : … » (ou Attention, Exemple, Bon à savoir, Astuce, À éviter) = encadré ;
+« ![légende](https://…) » = image.
 
 profil : 'tous', 'uemoa' (Côte d'Ivoire / UEMOA) ou 'france' — sert à proposer en premier la bonne version au client.
-Mise en forme du contenu : « ## » intertitre, « - » liste, « 1. » liste numérotée, **gras**.
+Mise en forme du contenu : « ## » chapitre, « - » liste, « 1. » liste numérotée, **gras**.
 """
 
 PARCOURS = {
@@ -29,6 +32,8 @@ Le contrôle interne est l’ensemble des dispositifs qui donnent à la directio
 
 Il ne s’agit pas d’un service ni d’un contrôle de plus : ce sont les règles, les vérifications et les comportements intégrés au travail de chacun. Une double signature sur un paiement, un rapprochement bancaire mensuel, la séparation entre la personne qui commande et celle qui paie : c’est du contrôle interne.
 
+> À retenir : le contrôle interne n’est pas l’affaire d’un service, c’est la façon dont **chacun** travaille.
+
 ## Le référentiel COSO
 Le référentiel le plus utilisé est le COSO (version 2013). Il décrit cinq composantes qui doivent fonctionner ensemble :
 1. **L’environnement de contrôle** : l’éthique, l’exemple donné par la direction, l’organisation des responsabilités.
@@ -41,6 +46,8 @@ Le référentiel le plus utilisé est le COSO (version 2013). Il décrit cinq co
 - **Première ligne** : les opérationnels. Ils possèdent les risques de leur activité et réalisent les contrôles du quotidien (contrôles de premier niveau).
 - **Deuxième ligne** : le contrôle interne, la gestion des risques, la conformité. Ils définissent la méthode, accompagnent et vérifient (contrôles de deuxième niveau).
 - **Troisième ligne** : l’audit interne. Il évalue de façon indépendante si l’ensemble fonctionne.
+
+> Exemple : dans une agence, le caissier compte sa caisse chaque soir (1re ligne), le contrôle permanent vérifie un échantillon d’arrêtés de caisse chaque mois (2e ligne), l’audit interne évalue tout le dispositif lors de sa mission (3e ligne).
 
 ## Votre rôle
 Quelle que soit votre fonction, vous contribuez : en appliquant les procédures, en réalisant les contrôles qui vous sont confiés, en conservant les preuves et en signalant une anomalie ou un risque nouveau.
@@ -74,10 +81,14 @@ Un risque bien écrit permet d’agir. Il précise :
 
 « Risque de fraude » est trop vague. « Paiement d’une facture fictive faute de vérification du bon de commande, entraînant une perte financière » est exploitable.
 
+> Astuce : si vous ne savez pas quel contrôle mettre en face d’un risque, c’est souvent que le risque est mal formulé : précisez sa cause.
+
 ## Coter le risque
 Chaque risque est évalué selon deux axes : **la probabilité** qu’il survienne et **l’impact** s’il survient. Le score combine les deux (par exemple probabilité × impact) et place le risque dans la matrice.
 
 On cote d’abord le **risque brut**, sans tenir compte des contrôles. On rattache ensuite les contrôles existants et on cote le **risque résiduel** (ou net), c’est-à-dire ce qui reste une fois les contrôles pris en compte. L’écart entre les deux montre l’efficacité du dispositif.
+
+> Attention : un risque résiduel coté très bas alors qu’aucun contrôle n’est testé est un signal d’alerte : la cotation doit s’appuyer sur des contrôles réels.
 
 ## Décider du traitement
 Pour chaque risque résiduel trop élevé, on choisit :
@@ -85,6 +96,8 @@ Pour chaque risque résiduel trop élevé, on choisit :
 - **transférer** : assurance, sous-traitance encadrée ;
 - **éviter** : arrêter l’activité concernée ;
 - **accepter** : décision formelle de la direction, dans la limite de l’appétence au risque.
+
+> À retenir : accepter un risque est une **décision**, prise par la bonne personne et tracée, jamais un oubli.
 
 ## Faire vivre la cartographie
 Une cartographie se revoit au moins une fois par an, et dès qu’un incident, un nouveau projet ou une nouvelle réglementation le justifie. Un risque coté « faible » mais touché par plusieurs incidents doit être réévalué.
@@ -116,6 +129,8 @@ Un processus est une suite d’activités qui transforme une demande en résulta
 
 Un logigramme (schéma du processus) rend tout cela lisible en un coup d’œil.
 
+> Exemple : processus achats en 6 étapes : besoin, demande d’achat, validation, commande, réception, paiement. Le risque majeur se trouve souvent entre la réception et le paiement.
+
 ## Repérer les étapes à risque
 Pour chaque étape, demandez-vous ce qui pourrait mal tourner : une erreur de saisie, une validation contournée, une même personne qui commande et réceptionne, un délai non tenu.
 
@@ -127,6 +142,8 @@ Un bon point de contrôle est placé **au plus près du risque** et laisse une *
 - **contrôle automatique** : le logiciel bloque une facture sans commande.
 
 On distingue les contrôles **préventifs** (ils empêchent l’erreur) et **détectifs** (ils la repèrent après coup). Les deux sont utiles.
+
+> À retenir : un bon contrôle est placé au plus près du risque, il est réalisé par quelqu’un d’indépendant de l’opération et il laisse une preuve.
 
 ## Dans Egalyx
 - **Contrôle Interne > Logigrammes** : dessiner le processus, ses étapes et ses acteurs.
@@ -159,6 +176,8 @@ Un processus en alimente un autre : les achats approvisionnent la production, la
 - choisir les processus à auditer en priorité ;
 - désigner un **propriétaire** pour chaque processus.
 
+> Bon à savoir : une carte de 10 à 20 processus suffit généralement. Au-delà, on perd la vue d’ensemble ; le détail va dans les logigrammes.
+
 ## Dans Egalyx
 - **Contrôle Interne > Cartographie des processus** : la carte pilotage, réalisation, support et les liens entre processus.
 - Les vues « risques » et « audit » montrent, pour chaque processus, ses risques et les audits réalisés.
@@ -183,11 +202,15 @@ C’est la base du dispositif : la deuxième ligne et l’audit vérifient ensui
 1. **Lisez la fiche de contrôle** : objectif, périmètre, fréquence, ce qu’il faut vérifier.
 2. **Réalisez le contrôle** sur la période ou l’échantillon demandé.
 3. **Conservez la preuve** : document signé, capture d’écran, état de rapprochement, liste des éléments vérifiés. Un contrôle sans preuve est considéré comme non réalisé.
+
+> Attention : un contrôle sans preuve est considéré comme **non réalisé**, même s’il a été fait.
 4. **Concluez** : conforme, ou non conforme avec une description précise de l’écart.
 5. **Respectez l’échéance** de la campagne.
 
 ## Que faire en cas d’anomalie ?
 Une anomalie n’est pas une faute de celui qui la trouve : c’est le contrôle qui fonctionne. Décrivez-la de façon factuelle (quoi, combien, quand), corrigez ce qui peut l’être immédiatement et signalez-la à votre responsable. Si elle révèle un risque nouveau ou un incident, déclarez-le.
+
+> À retenir : une anomalie trouvée, c’est un contrôle qui fonctionne. Le vrai problème serait de ne pas la signaler.
 
 ## Les erreurs à éviter
 - cocher « conforme » sans avoir vérifié ;
@@ -224,10 +247,14 @@ On teste rarement toute la population. L’échantillon doit être :
 - **ciblé** si besoin : les montants les plus élevés, les opérations inhabituelles ;
 - **documenté** : comment il a été tiré, pour que le contrôle puisse être refait.
 
+> Exemple : population de 1 200 crédits sur le trimestre ; échantillon de 40 tirés au hasard, plus les 10 plus gros montants ; 36 conformes sur 40, soit 90 % de conformité sur la partie aléatoire.
+
 Quand les données sont disponibles, l’analyse de données permet de tester 100 % de la population et de cibler l’échantillon sur les exceptions.
 
 ## Tester et conclure
 Pour chaque élément, comparez à la règle et notez le résultat avec la preuve. Le **taux de conformité** (éléments conformes ÷ éléments testés) donne la conclusion. Chaque anomalie est analysée : erreur isolée ou défaillance du dispositif ? Les défaillances donnent lieu à un **plan d’action**.
+
+> À retenir : une anomalie isolée se corrige ; une anomalie qui se répète révèle un défaut du dispositif et appelle un plan d’action.
 
 ## Communiquer
 Le résultat est partagé avec le responsable opérationnel : constats, taux, anomalies, actions attendues. Un bon rapport de contrôle est factuel, court et propose des actions mesurables.
@@ -257,6 +284,8 @@ Une bonne action est :
 - **datée** : une échéance réaliste ;
 - **assortie d’une preuve attendue**, définie dès le départ : procédure signée, capture du paramétrage, échantillon testé.
 
+> Exemple : à la place de « Renforcer les contrôles sur les fournisseurs », écrivez « Mettre en place une double validation des changements de RIB fournisseurs dans le logiciel comptable — responsable : chef comptable — échéance : 31 mars — preuve : capture du paramétrage et test sur 5 changements ».
+
 ## Suivre l’avancement
 Mettez à jour l’avancement régulièrement et ajoutez vos commentaires. Si l’échéance ne peut pas être tenue, demandez un **report justifié** avant qu’elle ne soit dépassée ; un report n’est jamais automatique.
 
@@ -267,6 +296,8 @@ Une action n’est close que lorsque la preuve est déposée et **vérifiée** p
 - des actions vagues impossibles à vérifier ;
 - un statut « en cours » qui ne bouge pas pendant des mois ;
 - une clôture sans preuve.
+
+> À retenir : précise, nommée, datée, prouvée : une bonne action coche ces quatre cases.
 
 ## Dans Egalyx
 - **Plans d’action** : vos actions, leur échéance, leur avancement.
@@ -291,6 +322,8 @@ Dans les huit pays de l’UEMOA, la lutte repose sur une **loi uniforme** relati
 
 Chaque pays dispose d’une **CENTIF** (Cellule nationale de traitement des informations financières), qui reçoit les déclarations de soupçon.
 
+> Bon à savoir : la déclaration de soupçon n’est pas une accusation. Elle signale une opération inhabituelle ; c’est la CENTIF qui analyse.
+
 ## Vos obligations
 - **Connaître le client** : vérifier son identité, celle du bénéficiaire effectif, l’objet de la relation et l’origine des fonds ; mettre à jour le dossier.
 - **Vigilance renforcée** pour les situations à risque : personnes politiquement exposées, pays à haut risque, opérations complexes ou inhabituelles.
@@ -305,8 +338,12 @@ Chaque pays dispose d’une **CENTIF** (Cellule nationale de traitement des info
 - transferts répétés vers ou depuis des pays à haut risque ;
 - recours inhabituel à des intermédiaires ou à des comptes de tiers.
 
+> Exemple : un commerçant dont le compte reçoit habituellement 2 à 3 millions de FCFA par mois enregistre soudain plusieurs dépôts en espèces importants, effectués par des tiers, juste sous le seuil interne de contrôle. C’est un cas à remonter au responsable conformité.
+
 ## Ne jamais avertir le client
 Il est interdit d’informer le client, ou un tiers, qu’une déclaration de soupçon a été faite ou envisagée. Restez professionnel et transmettez l’information en interne.
+
+> Attention : prévenir le client qu’un signalement le concerne est une **infraction**, même par maladresse.
 
 ## Dans Egalyx
 - **Conformité > Tiers et LCB-FT** : fiches clients et fournisseurs, vigilance, criblage des listes de sanctions.
@@ -332,6 +369,8 @@ Les obligations figurent principalement dans le **Code monétaire et financier**
 
 Les déclarations de soupçon sont adressées à **Tracfin**, le service de renseignement financier rattaché aux ministères économiques et financiers.
 
+> Bon à savoir : la déclaration de soupçon n’est pas une accusation. Elle signale une opération inhabituelle ; c’est Tracfin qui analyse.
+
 ## Vos obligations
 - **Identifier et vérifier** le client et le bénéficiaire effectif, comprendre l’objet de la relation d’affaires.
 - **Évaluer le risque** et adapter la vigilance : vigilance renforcée pour les personnes politiquement exposées, les pays à haut risque, les opérations complexes ou inhabituelles.
@@ -347,8 +386,12 @@ Les déclarations de soupçon sont adressées à **Tracfin**, le service de rens
 - flux avec des pays à haut risque ou des centres offshore ;
 - changement brutal du fonctionnement d’un compte.
 
+> Exemple : un client particulier, salarié, reçoit en quelques semaines plusieurs virements importants de sociétés étrangères qu’il ne sait pas expliquer, puis demande un retrait en espèces. C’est un cas à remonter au responsable LCB-FT.
+
 ## Ne jamais avertir le client
 La loi interdit de porter à la connaissance du client, ou d’un tiers, l’existence d’une déclaration de soupçon. Restez professionnel et transmettez l’information en interne.
+
+> Attention : prévenir le client qu’un signalement le concerne est une **infraction**, même par maladresse.
 
 ## Dans Egalyx
 - **Conformité > Tiers et LCB-FT** : fiches clients et fournisseurs, vigilance, criblage des listes de sanctions.
@@ -370,6 +413,8 @@ La corruption consiste à **offrir, promettre, solliciter ou accepter** un avant
 
 Le **trafic d’influence** consiste à monnayer une influence, réelle ou supposée, pour obtenir une décision favorable.
 
+> À retenir : la corruption est punie que l’avantage soit **donné ou reçu**, dans le public comme dans le privé, directement ou par un intermédiaire.
+
 ## Le cadre
 - **En France**, la loi Sapin II impose aux grandes entreprises un dispositif anticorruption : code de conduite, cartographie des risques de corruption, évaluation des tiers, contrôles comptables, **formation des personnels les plus exposés**, dispositif d’alerte et régime disciplinaire. L’Agence française anticorruption (AFA) contrôle ces dispositifs.
 - **Dans l’espace UEMOA**, les États ont adopté des lois de lutte contre la corruption et créé des autorités dédiées (en Côte d’Ivoire, la Haute Autorité pour la Bonne Gouvernance). La corruption d’agents publics, nationaux ou étrangers, est pénalement sanctionnée.
@@ -380,6 +425,8 @@ Le **trafic d’influence** consiste à monnayer une influence, réelle ou suppo
 - **Intermédiaires** : un agent ou consultant rémunéré sans prestation réelle peut servir à verser un pot-de-vin.
 - **Conflits d’intérêts** : un lien personnel avec un fournisseur, un client ou un candidat doit être déclaré.
 - **Dons, mécénat, sponsoring** : ils ne doivent jamais servir de contrepartie.
+
+> Exemple : un fournisseur en pleine consultation vous propose de prendre en charge le voyage de votre famille « pour vous remercier de votre confiance ». Il faut refuser et le déclarer, même si la décision ne dépend pas que de vous.
 
 ## Comment réagir ?
 1. Refusez tout avantage indu, poliment et clairement.
@@ -405,6 +452,8 @@ Le **trafic d’influence** consiste à monnayer une influence, réelle ou suppo
          contenu="""## Qu’est-ce qu’une donnée personnelle ?
 Toute information qui permet d’identifier une personne, directement ou indirectement : nom, numéro de téléphone, adresse électronique, numéro de compte, photo, adresse IP, matricule… Certaines données sont **sensibles** (santé, opinions, origine, données biométriques) et demandent une protection renforcée.
 
+> Bon à savoir : une adresse électronique professionnelle nominative (prenom.nom@entreprise) est aussi une donnée personnelle.
+
 ## Le cadre
 - **Dans l’Union européenne**, le RGPD s’applique depuis le 25 mai 2018 ; en France, la **CNIL** en contrôle le respect. Les sanctions peuvent atteindre 20 millions d’euros ou 4 % du chiffre d’affaires mondial.
 - **En Côte d’Ivoire**, la loi n° 2013-450 du 19 juin 2013 encadre la protection des données personnelles ; l’**ARTCI** en est l’autorité de contrôle.
@@ -424,8 +473,12 @@ Toute information qui permet d’identifier une personne, directement ou indirec
 - verrouiller sa session en quittant son poste ;
 - utiliser les outils et espaces de stockage fournis par l’organisation.
 
+> Attention : envoyer un fichier de clients ou de salariés sur une messagerie personnelle, même pour travailler chez soi, expose l’organisation à une fuite de données.
+
 ## En cas de fuite de données
 Une perte de clé USB, un courriel envoyé au mauvais destinataire ou un piratage est une **violation de données**. Signalez-la **immédiatement** : dans l’Union européenne, l’autorité doit être notifiée dans les 72 heures lorsque la violation présente un risque pour les personnes.
+
+> À retenir : en cas de fuite, chaque heure compte. Signalez d’abord, on cherchera les responsabilités ensuite.
 
 ## Dans Egalyx
 - **Signaler un incident** (menu du haut) : pour déclarer immédiatement une fuite ou une perte de données.""",
@@ -450,8 +503,12 @@ L’hameçonnage (phishing) est un message frauduleux (courriel, SMS, appel, mes
 - un lien dont l’adresse réelle (visible en survolant) ne correspond pas au site attendu ;
 - une pièce jointe inattendue, surtout une archive ou un document qui demande d’activer des macros.
 
+> Exemple : « Votre colis est en attente, payez 1,99 € de frais de douane ici » ou « Votre messagerie est pleine, reconnectez-vous » : ces messages imitent de vraies entreprises pour voler vos identifiants ou votre carte.
+
 ## La fraude au président et au changement de RIB
 Un fraudeur se fait passer pour un dirigeant ou un fournisseur et demande un virement urgent et confidentiel, ou annonce un nouveau RIB. **Vérifiez toujours par un autre canal**, avec un numéro de téléphone que vous connaissez déjà, jamais celui indiqué dans le message.
+
+> Attention : l’urgence et la confidentialité (« n’en parlez à personne ») sont les deux leviers favoris des fraudeurs.
 
 ## Protéger ses accès
 - un mot de passe **long et unique** pour chaque service (une phrase de passe est plus facile à retenir) ;
@@ -462,6 +519,8 @@ Un fraudeur se fait passer pour un dirigeant ou un fournisseur et demande un vir
 
 ## Réagir vite
 Vous avez cliqué ou donné un mot de passe ? Ce n’est pas grave si vous réagissez **immédiatement** : prévenez le service informatique et changez votre mot de passe. Le temps perdu par peur d’être blâmé profite à l’attaquant.
+
+> À retenir : en cas de doute, ne cliquez pas, vérifiez par un autre moyen, et signalez.
 
 ## Dans Egalyx
 - Activez la **double authentification** dans votre profil.
@@ -488,12 +547,16 @@ Face à une situation inhabituelle, posez-vous ces questions :
 
 Si la réponse vous met mal à l’aise, demandez conseil avant d’agir.
 
+> Astuce : le « test du journal » : si vous ne voudriez pas lire votre décision à la une demain, c’est qu’il faut en parler avant.
+
 ## Le dispositif d’alerte
 Le dispositif d’alerte permet de signaler un manquement grave : fraude, corruption, harcèlement, discrimination, atteinte à la sécurité ou à l’environnement, violation de la loi.
 - Le signalement peut être fait par le canal interne prévu, et selon les cas de façon **confidentielle**.
 - L’identité de la personne qui signale et les faits sont **protégés** ; seules les personnes chargées du traitement y ont accès.
 - **Aucune sanction ni représaille** ne peut viser une personne qui signale de bonne foi.
 - En France, la loi encadre la protection des lanceurs d’alerte, avec des délais pour accuser réception et informer de la suite donnée.
+
+> À retenir : signaler de bonne foi un manquement grave est protégé. Les représailles, elles, sont interdites.
 
 ## Bien signaler
 Décrivez des **faits précis** (quoi, quand, où, qui), joignez les éléments dont vous disposez et évitez les jugements. Un signalement de bonne foi qui se révèle infondé n’expose à aucune sanction ; un signalement fait de mauvaise foi, si.

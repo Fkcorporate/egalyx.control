@@ -806,7 +806,8 @@ ARTICLES = [
       'et vous lancez des campagnes : chaque personne concernée reçoit une notification et suit la formation depuis **Mes formations**. '
       'Le suivi montre qui a validé, qui est en retard, et s’exporte en Excel comme preuve de formation (LCB-FT, anticorruption, RGPD…). '
       'Module activé sur demande par l’éditeur.',
-      etapes=['**Nouveau module** : titre, thème, durée, texte (## intertitre, - liste, **gras**), vidéo YouTube ou Vimeo facultative.',
+      etapes=['**Nouveau module** : titre, thème, durée, texte (## nouveau chapitre, - liste, **gras**, « > À retenir : … » pour un encadré, '
+              '« ![légende](https://…) » pour une image), vidéo YouTube ou Vimeo facultative.',
               'Ajoutez les **questions du quiz** et cochez la ou les bonnes réponses ; fixez le **score minimum** pour valider. '
               'Sans question, la personne valide par « J’ai lu et compris ».',
               '**Enregistrer et publier**, puis **Lancer une campagne** : module, date limite, personnes concernées '
@@ -823,6 +824,8 @@ ARTICLES = [
              'modifiable ; quand Egalyx publie une nouvelle version, le module affiche « Nouvelle version disponible ».',
              '**Lancer le parcours** crée une campagne par module, en une fois, pour les mêmes personnes et la même date limite.',
              '**Attestation PDF** nominative pour chaque formation validée (Mes formations, ou icône PDF dans le suivi).',
+             'Côté participant, chaque chapitre s’affiche comme une page, avec la progression à gauche ; le quiz se passe une question '
+             'à la fois. La lecture reprend là où la personne s’était arrêtée.',
              '**Relances automatiques** 7 jours avant, la veille, puis 1 et 7 jours après la date limite (notification et e-mail) ; '
              'désactivables par campagne. Une campagne peut alimenter chaque jour un **KRI** (% de personnes qui n’ont pas validé).'],
       mots=['formation', 'e-learning', 'elearning', 'quiz', 'bibliotheque', 'parcours', 'attestation pdf', 'certificat', 'sensibilisation', 'campagne', 'module', 'attestation', 'lcb-ft', 'blanchiment',

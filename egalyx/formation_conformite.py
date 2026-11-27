@@ -120,11 +120,30 @@ def _ligne(t):
     return Markup(_GRAS.sub(lambda x: f'<strong>{x.group(1)}</strong>', str(escape(t))))
 
 
+ENCADRES = {'à retenir': ('retenir', 'À retenir'), 'a retenir': ('retenir', 'À retenir'), 'attention': ('attention', 'Attention'),
+            'exemple': ('exemple', 'Exemple'), 'bon à savoir': ('savoir', 'Bon à savoir'), 'bon a savoir': ('savoir', 'Bon à savoir'),
+            'astuce': ('savoir', 'Astuce'), 'à éviter': ('attention', 'À éviter'), 'a eviter': ('attention', 'À éviter')}
+_IMAGE = re.compile(r'^!\[([^\]]{0,200})\]\((https://[^\s()<>"\']{1,500})\)$')
+
+
+def _encadre(lignes):
+    texte = ' '.join(lignes).strip()
+    genre, titre = 'savoir', None
+    m = re.match(r'^([^:]{2,20})\s*:\s*(.*)$', texte)
+    if m and m.group(1).strip().lower() in ENCADRES:
+        genre, titre = ENCADRES[m.group(1).strip().lower()]
+        texte = m.group(2)
+    tete = f'<p class="fe-titre">{escape(titre)}</p>' if titre else ''
+    return f'<aside class="fe fe-{genre}">{tete}<p>{_ligne(texte)}</p></aside>'
+
+
 def rendre_contenu(texte):
-    """Texte simple → HTML sûr : « ## » titre, « - » liste, « 1. » liste numérotée, **gras**, lignes vides = paragraphes."""
+    """Texte simple → HTML sûr : « ## » titre, « - » liste, « 1. » liste numérotée, **gras**, lignes vides = paragraphes,
+    « > À retenir : … » (ou Attention, Exemple, Bon à savoir, Astuce, À éviter) = encadré,
+    « ![légende](https://…) » seul sur sa ligne = image (adresses https uniquement)."""
     if not texte:
         return Markup('')
-    html, liste, para = [], None, []
+    html, liste, para, citation = [], None, [], []
 
     def fermer_para():
         if para:
@@ -137,10 +156,27 @@ def rendre_contenu(texte):
             html.append(f'</{liste}>')
             liste = None
 
+    def fermer_citation():
+        if citation:
+            html.append(_encadre(citation))
+            citation.clear()
+
     for brut in texte.replace('\r\n', '\n').split('\n'):
         ligne = brut.strip()
+        if ligne.startswith('>'):
+            fermer_para(); fermer_liste()
+            citation.append(ligne.lstrip('>').strip())
+            continue
+        fermer_citation()
         if not ligne:
             fermer_para(); fermer_liste()
+            continue
+        img = _IMAGE.match(ligne)
+        if img:
+            fermer_para(); fermer_liste()
+            legende = escape(img.group(1).strip())
+            html.append(f'<figure class="fe-image"><img src="{escape(img.group(2))}" alt="{legende}" loading="lazy" referrerpolicy="no-referrer">'
+                        + (f'<figcaption>{legende}</figcaption>' if legende else '') + '</figure>')
             continue
         if ligne.startswith('## ') or ligne.startswith('# '):
             fermer_para(); fermer_liste()
@@ -159,8 +195,25 @@ def rendre_contenu(texte):
             continue
         fermer_liste()
         para.append(ligne)
-    fermer_para(); fermer_liste()
+    fermer_citation(); fermer_para(); fermer_liste()
     return Markup('\n'.join(html))
+
+
+def chapitres(texte):
+    """Découpe le contenu en chapitres sur les intertitres « ## » : [{'titre', 'html'}]. Le texte avant le premier
+    intertitre devient « Introduction »."""
+    blocs, titre, courant = [], None, []
+    for brut in (texte or '').replace('\r\n', '\n').split('\n'):
+        s_ = brut.strip()
+        if s_.startswith('## ') or (s_.startswith('# ') and not s_.startswith('##')):
+            if titre is not None or any(x.strip() for x in courant):
+                blocs.append((titre or 'Introduction', '\n'.join(courant)))
+            titre, courant = s_.lstrip('#').strip(), []
+        else:
+            courant.append(brut)
+    if titre is not None or any(x.strip() for x in courant):
+        blocs.append((titre or 'Introduction', '\n'.join(courant)))
+    return [{'titre': t, 'html': rendre_contenu(c)} for t, c in blocs if t or c.strip()]
 
 
 def video_integree(url):
@@ -372,7 +425,7 @@ def module_apercu(mid):
     cid = _exiger_suivi()
     mod = _module(cid, mid)
     return render_template('egalyx/formation_suivre.html', mod=mod, a=None, c=None, apercu=True, resultat=None,
-                           contenu=rendre_contenu(mod.contenu), video=video_integree(mod.video_url))
+                           contenu=rendre_contenu(mod.contenu), chapitres=chapitres(mod.contenu), today=date.today(), CATEGORIE=CATEGORIE, video=video_integree(mod.video_url))
 
 
 @bp.route('/module/<int:mid>/etat', methods=['POST'])
@@ -647,7 +700,7 @@ def mes_formations():
         mod = m.db.session.get(m.ModuleFormationConformite, c.module_id)
         lignes.append({'a': a, 'c': c, 'mod': mod, 'statut': statut_effectif(a, c)})
     lignes.sort(key=lambda x: (x['statut'] == 'reussi', x['c'].date_limite or date.max))
-    return render_template('egalyx/formation_mes.html', lignes=lignes, STATUTS=STATUTS, CATEGORIE=CATEGORIE)
+    return render_template('egalyx/formation_mes.html', lignes=lignes, STATUTS=STATUTS, CATEGORIE=CATEGORIE, today=date.today())
 
 
 def _mon_affectation(aid):
@@ -681,7 +734,7 @@ def suivre(aid):
         if questions and any(not reponses[i] for i in range(len(questions))):
             flash('Répondez à toutes les questions avant de valider.', 'warning')
             return render_template('egalyx/formation_suivre.html', mod=mod, a=a, c=c, apercu=False, resultat=None,
-                                   contenu=rendre_contenu(mod.contenu), video=video_integree(mod.video_url), choisis=reponses)
+                                   contenu=rendre_contenu(mod.contenu), chapitres=chapitres(mod.contenu), today=date.today(), CATEGORIE=CATEGORIE, video=video_integree(mod.video_url), choisis=reponses)
         score, justes = noter(questions, reponses)
         reussi = score >= (mod.score_min or 0)
         a.tentatives = (a.tentatives or 0) + 1
@@ -696,7 +749,7 @@ def suivre(aid):
         m.db.session.commit()
         resultat = {'score': score, 'reussi': reussi, 'justes': justes, 'reponses': reponses}
     return render_template('egalyx/formation_suivre.html', mod=mod, a=a, c=c, apercu=False, resultat=resultat,
-                           contenu=rendre_contenu(mod.contenu), video=video_integree(mod.video_url), choisis=None)
+                           contenu=rendre_contenu(mod.contenu), chapitres=chapitres(mod.contenu), today=date.today(), CATEGORIE=CATEGORIE, video=video_integree(mod.video_url), choisis=None)
 
 
 @bp.route('/suivre/<int:aid>/sans-quiz', methods=['POST'])
@@ -741,6 +794,8 @@ def enregistrer(app):
     app.jinja_env.globals['formation_gestion_visible'] = _gestion_visible
     app.jinja_env.globals['formation_mes_visible'] = _mes_visible
     app.jinja_env.globals['formation_a_faire'] = nb_a_faire
+    from egalyx import formation_visuels
+    formation_visuels.enregistrer(app)
     with app.app_context():
         try:
             m = _m()

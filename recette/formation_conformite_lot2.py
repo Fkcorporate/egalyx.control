@@ -47,7 +47,18 @@ with A.app.app_context():
         parcours='controle_interne').order_by(M.ModuleBibliothequeFormation.ordre)] == ['ci_bases', 'ci_cartographie_risques', 'ci_processus',
                                                                                         'ci_carto_processus', 'ci_campagnes_n1', 'ci_controle_n2', 'ci_plans_action'])
     lot2.amorcer(A.app)
-    verif('amorçage relancé : rien en double', M.ModuleBibliothequeFormation.query.count() == 13)
+    verif('amorçage relancé : rien en double, rien de modifié', M.ModuleBibliothequeFormation.query.count() == 13
+          and all(b.version == 1 for b in M.ModuleBibliothequeFormation.query))
+    b0 = M.ModuleBibliothequeFormation.query.filter_by(code='cybersecurite').first()
+    b1 = M.ModuleBibliothequeFormation.query.filter_by(code='ethique_alerte').first()
+    b0.contenu = 'Ancienne version du fichier'; b1.contenu = 'Modifié par le super admin'; b1.updated_by = ids['superadmin']
+    db.session.commit()
+    lot2.amorcer(A.app)
+    b0 = M.ModuleBibliothequeFormation.query.filter_by(code='cybersecurite').first()
+    b1 = M.ModuleBibliothequeFormation.query.filter_by(code='ethique_alerte').first()
+    verif('fichier enrichi : module jamais modifié à l’écran → mis à jour en version 2', b0.version == 2 and 'hameçonnage' in b0.contenu)
+    verif('module modifié par le super admin : jamais écrasé', b1.version == 1 and b1.contenu == 'Modifié par le super admin')
+    b0.version = 1; db.session.commit()
 r = appel(sa, 'get', '/formation-conformite/bibliotheque-egalyx')
 verif('super admin : page de la bibliothèque', r.status_code == 200 and 'La cartographie des risques'.encode() in r.data, r.status_code)
 verif('menu super admin : « Bibliothèque de formation »', 'Bibliothèque de formation'.encode() in appel(sa, 'get', '/dashboard').data)
@@ -218,5 +229,28 @@ verif('synthèse : phrase sur la formation', any(x.startswith('Formation à la c
 phr0 = rapport_comite.rediger_synthese({'date': '27/11/2026', 'total_risques': 10, 'evalues': 10, 'couverture': 100, 'critiques': 0,
                                         'critiques_bruts': 0, 'hors_appetence': 0})
 verif('synthèse : rien sur la formation si le module n’est pas utilisé', not any('Formation' in x for x in phr0))
+
+print('--- 9. Expérience du participant (présentation)')
+html = str(fc.rendre_contenu("> À retenir : la **preuve** compte\n\n> Attention : <b>danger</b>\n\n![Schéma](https://exemple.com/a.png)\n\n![x](http://exemple.com/b.png)\n\n![y](javascript:alert(1))"))
+verif('encadrés « À retenir » et « Attention », texte neutralisé', 'fe fe-retenir' in html and 'fe fe-attention' in html
+      and '<strong>preuve</strong>' in html and '&lt;b&gt;danger' in html)
+verif('images : https seulement (http et javascript refusés)', html.count('<img ') == 1 and 'src="https://exemple.com/a.png"' in html
+      and 'javascript' not in html.split('<p>')[0])
+ch = fc.chapitres("Intro\n## Un\ntexte\n## Deux\n- a")
+verif('contenu découpé en chapitres (introduction comprise)', [c['titre'] for c in ch] == ['Introduction', 'Un', 'Deux'])
+with A.app.app_context():
+    b = M.ModuleBibliothequeFormation.query.filter_by(code='ci_cartographie_risques').first()
+    verif('bibliothèque : encadrés présents dans les modules', b.contenu.count('\n> ') >= 2)
+    camp = db.session.get(M.CampagneFormationConformite, KID)
+    aid2 = M.AffectationFormationConformite.query.filter_by(campagne_id=KID, user_id=ids['operateur']).first().id
+    camp.statut = 'active'; db.session.commit()
+r = appel(oper, 'get', f'/formation-conformite/suivre/{aid2}')
+t = r.data.decode(errors='ignore')
+verif('lecteur : couverture du thème, étapes, quiz pas à pas', r.status_code == 200 and 'fx-couv fx-hero' in t and 'data-aller=' in t
+      and 'fx-quiz-pas' in t and 'Question suivante' in t and '<svg' in t)
+verif('lecteur : animations coupées si l’utilisateur réduit les mouvements', 'prefers-reduced-motion: reduce' in t)
+r = appel(oper, 'get', '/formation-conformite/mes-formations')
+t = r.data.decode(errors='ignore')
+verif('« Mes formations » : cartes illustrées et compteurs', r.status_code == 200 and 'fm-carte' in t and 'à suivre' in t and 'fm-chiffres' in t)
 
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')
