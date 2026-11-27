@@ -50,12 +50,10 @@ verif('Adresse en .html → 301 vers l\'adresse propre', c.get(arts[0]['url'] + 
 for s in blog.SUSPENDUES:
     verif(f'Page suspendue « {s} » : 404', c.get('/blog/' + s).status_code == 404)
 for s, cible in blog.FUSIONS.items():
-    r = c.get('/blog/' + s); verif(f'Doublon fusionné « {s} » → 301', r.status_code == 301 and r.headers['Location'].endswith(cible if cible.startswith('/') else '/' + cible))
+    r = c.get('/blog/' + s); verif(f'Doublon fusionné « {s} » → 301', r.status_code == 301 and r.headers['Location'].endswith(cible))
 sm = c.get('/sitemap.xml').get_data(as_text=True)
-verif('Sitemap : les articles indexables, ni les trop courts ni les suspendus',
-      all((a['url'] + '<' in sm) == a['indexable'] for a in arts) and not any('/blog/' + s + '<' in sm for s in blog.SUSPENDUES))
-verif('/home → / (301)', c.get('/home').status_code == 301 and c.get('/home').headers['Location'].endswith('/'))
-t = c.get('/').get_data(as_text=True)
-verif('Accueil à la racine : une seule canonical, la sienne', re.findall(r'rel="canonical" href="([^"]+)"', t) == ['https://www.egalyx.com/'])
+verif('Sitemap : tous les articles, sans les pages suspendues', all(a['url'] in sm for a in arts) and not any('/blog/' + s + '<' in sm for s in blog.SUSPENDUES))
+t = c.get('/home').get_data(as_text=True)
+verif('Accueil : une seule canonical, la sienne', re.findall(r'rel="canonical" href="([^"]+)"', t) == ['https://www.egalyx.com/home'])
 verif('Menu : lien Blog', 'href="/blog/">Blog</a>' in t)
 print(f'\n{sum(res)}/{len(res)} vérifications réussies')

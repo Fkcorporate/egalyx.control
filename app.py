@@ -72069,9 +72069,45 @@ def super_admin_generateur_conventions():
     return render_template('super_admin/generateur_conventions.html')
 @app.route('/sitemap.xml')
 def sitemap():
-    """Plan du site : pages publiques et pages de mots-clés (egalyx/seo.py) ; le blog ajoute ses articles."""
-    from egalyx.seo import sitemap_base
-    return sitemap_base()
+    """Sitemap principal - version tranquille"""
+    today = _aujourdhui().isoformat()
+    
+    # Liste des URLs à indexer
+    urls = [
+        "https://www.egalyx.com/",
+        "https://www.egalyx.com/home",
+        "https://www.egalyx.com/fonctionnalites",
+        "https://www.egalyx.com/tarifs",
+        "https://www.egalyx.com/a-propos",
+        "https://www.egalyx.com/contact",
+        "https://www.egalyx.com/blog",
+        "https://www.egalyx.com/logiciel-audit-interne-ia",
+        "https://www.egalyx.com/controle-interne-logiciel-pme",
+        "https://www.egalyx.com/gestion-risques-entreprise-ia",
+        "https://www.egalyx.com/cartographie-risques-logiciel",
+        "https://www.egalyx.com/conformite-ohada-logiciel",
+        "https://www.egalyx.com/conformite-rgpd-logiciel",
+        "https://www.egalyx.com/indicateurs-risques-kri",
+        "https://www.egalyx.com/plan-action-correctif-logiciel",
+        "https://www.egalyx.com/audit-interne-automatise",
+        "https://www.egalyx.com/gouvernance-entreprise-logiciel",
+    ]
+    
+    # Construction du XML
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    
+    for url in urls:
+        xml += '    <url>\n'
+        xml += f'        <loc>{url}</loc>\n'
+        xml += f'        <lastmod>{today}</lastmod>\n'
+        xml += '        <changefreq>weekly</changefreq>\n'
+        xml += '        <priority>0.8</priority>\n'
+        xml += '    </url>\n'
+    
+    xml += '</urlset>'
+    
+    return Response(xml, mimetype='application/xml')
 # ================================================
 # ROUTES POUR LA CÔTE D'IVOIRE ET L'AFRIQUE
 # ================================================
